@@ -1,0 +1,20 @@
+export default {
+  dashboard: 'ダッシュボード',
+  website: 'ウェブサイト管理',
+  database: 'データベース',
+  container: 'コンテナ管理',
+  appstore: 'アプリストア',
+  plugins: 'プラグイン管理',
+  file: 'ファイル管理',
+  terminal: 'ターミナル',
+  cron: '定期タスク',
+  monitor: 'モニタリング',
+  backup: 'バックアップ',
+  firewall: 'ファイアウォール',
+  ssh: 'SSHセキュリティ',
+  alert: 'アラート通知',
+  ssl: 'SSL証明書',
+  users: 'ユーザー管理',
+  audit: '監査ログ',
+  settings: 'システム設定'
+}

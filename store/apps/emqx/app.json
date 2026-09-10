@@ -1,0 +1,36 @@
+{
+  "key": "emqx",
+  "name": "EMQX",
+  "version": "5.6",
+  "description": "EMQX 是大规模分布式 MQTT 消息服务器，物联网（IoT）场景的首选消息中间件。",
+  "category": "network",
+  "tags": [
+    "emqx",
+    "mqtt",
+    "iot"
+  ],
+  "required_ports": [
+    1883,
+    18083
+  ],
+  "min_memory_mb": 256,
+  "min_disk_gb": 1,
+  "icon": "",
+  "env_params": [
+    {
+      "key": "EMQX_MQTT_PORT",
+      "label": "MQTT 端口",
+      "type": "number",
+      "required": false,
+      "default": "1883"
+    },
+    {
+      "key": "EMQX_DASHBOARD_PORT",
+      "label": "控制台端口",
+      "type": "number",
+      "required": false,
+      "default": "18083"
+    }
+  ],
+  "compose_file": "docker-compose.yml"
+}

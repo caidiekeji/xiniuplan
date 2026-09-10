@@ -1,0 +1,28 @@
+{
+  "key": "halo",
+  "name": "Halo",
+  "version": "2.17",
+  "description": "Halo 是一款现代化开源博客/CMS 系统，主题生态丰富，一键搭建个人博客。",
+  "category": "website",
+  "tags": [
+    "halo",
+    "blog",
+    "cms"
+  ],
+  "required_ports": [
+    8090
+  ],
+  "min_memory_mb": 512,
+  "min_disk_gb": 2,
+  "icon": "",
+  "env_params": [
+    {
+      "key": "HALO_PORT",
+      "label": "端口",
+      "type": "number",
+      "required": false,
+      "default": "8090"
+    }
+  ],
+  "compose_file": "docker-compose.yml"
+}

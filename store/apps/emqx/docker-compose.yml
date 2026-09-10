@@ -1,0 +1,15 @@
+version: "3.8"
+
+services:
+  emqx:
+    image: emqx/emqx:5.6.1
+    container_name: emqx
+    restart: unless-stopped
+    ports:
+      - "{{EMQX_MQTT_PORT}}:1883"
+      - "{{EMQX_DASHBOARD_PORT}}:18083"
+    volumes:
+      - emqx_data:/opt/emqx/data
+
+volumes:
+  emqx_data:

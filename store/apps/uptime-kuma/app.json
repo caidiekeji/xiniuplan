@@ -1,0 +1,16 @@
+{
+  "key": "uptime-kuma",
+  "name": "Uptime Kuma",
+  "version": "1.23.0",
+  "description": "Uptime Kuma 是一个易于使用的自托管监控工具，支持 HTTP/TCP/ICMP/DNS 等多种监控类型，提供状态页和告警通知。",
+  "icon": "",
+  "category": "monitor",
+  "tags": ["monitor", "uptime", "status-page"],
+  "required_ports": [3001],
+  "env_params": [
+    {"key": "KUMA_PORT", "label": "Web 端口", "type": "number", "required": false, "default": "3001"}
+  ],
+  "compose_file": "docker-compose.yml",
+  "min_memory_mb": 128,
+  "min_disk_gb": 1
+}

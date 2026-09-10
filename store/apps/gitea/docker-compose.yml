@@ -1,0 +1,20 @@
+version: "3.8"
+
+services:
+  gitea:
+    image: gitea/gitea:1.21
+    container_name: gitea
+    restart: unless-stopped
+    ports:
+      - "{{GITEA_PORT}}:3000"
+      - "{{GITEA_SSH_PORT}}:22"
+    volumes:
+      - gitea_data:/data
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - USER_UID=1000
+      - USER_GID=1000
+
+volumes:
+  gitea_data:

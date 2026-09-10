@@ -1,0 +1,251 @@
+/* 云枢面板全局样式 — 基于 tokens.css */
+@import './tokens.css';
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  width: 100%;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  color: var(--ink);
+  background-color: var(--bg);
+  /* 长字符串（URL/路径/容器 ID）放不下时才断行，正常文本不受影响 */
+  overflow-wrap: break-word;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background-color var(--t-normal) var(--ease), color var(--t-normal) var(--ease);
+  /* 移动端防溢出：异常宽的组件撑破页面时以页面滚动为准，不允许产生横向溢出 */
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+
+a {
+  color: var(--acc);
+  text-decoration: none;
+  transition: color var(--t-fast) var(--ease);
+}
+
+a:hover {
+  color: var(--acc-hover);
+}
+
+/* 等宽数字 — 仪表盘刻度感 */
+.mono,
+.num,
+[data-mono] {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 滚动条 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--faint);
+}
+
+/* 签名元素：状态指示灯 */
+.led {
+  display: inline-block;
+  width: var(--led-size);
+  height: var(--led-size);
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.led--ok {
+  background: var(--ok);
+  box-shadow: 0 0 6px var(--ok);
+  animation: led-pulse var(--led-pulse-duration) ease-in-out infinite;
+}
+
+.led--warn {
+  background: var(--warn);
+  box-shadow: 0 0 6px var(--warn);
+}
+
+.led--err {
+  background: var(--err);
+  box-shadow: 0 0 6px var(--err);
+  animation: led-blink 1s ease-in-out infinite;
+}
+
+.led--offline {
+  background: var(--faint);
+}
+
+@keyframes led-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+@keyframes led-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.2; }
+}
+
+/* 减少动效偏好 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Naive UI 主题覆盖 — 对齐设计 token */
+.n-config-provider {
+  height: 100%;
+}
+
+/* 路由切换过渡 */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity var(--t-normal) var(--ease);
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
+/* ========== 全局移动端优化 ========== */
+@media (max-width: 768px) {
+  /* Naive UI 表单：输入框宽度自适应 */
+  .n-form-item-label {
+    padding-right: 8px !important;
+  }
+
+  /* 弹窗宽度钳制：任何固定宽度的弹窗都不允许超过视口 */
+  .n-modal,
+  .n-modal .n-card {
+    max-width: calc(100vw - 24px) !important;
+  }
+
+  /* 卡片内的筛选/统计行允许换行，防止单行撑破 */
+  .filter-bar,
+  .tab-toolbar {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+
+  .filter-bar .n-input,
+  .filter-bar .n-select {
+    width: 100% !important;
+  }
+
+  /* 表单标签改为顶部对齐，节省横向空间 */
+  .n-form--label-left .n-form-item-label {
+    justify-content: flex-start !important;
+    padding-bottom: 4px !important;
+  }
+
+  /* 弹窗内容区减小 padding */
+  .n-modal .n-card {
+    margin: 12px !important;
+  }
+
+  /* 抽屉全屏 */
+  .n-drawer {
+    max-width: 100vw !important;
+  }
+
+  /* 表格操作列：按钮缩小 */
+  .n-data-table .n-button {
+    padding: 0 6px !important;
+  }
+
+  /* Tab 标签可横向滚动 */
+  .n-tabs-nav {
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+  }
+  .n-tabs-nav-scroll {
+    overflow: visible !important;
+  }
+
+  /* 下拉选项最小宽度 */
+  .n-select {
+    max-width: 100%;
+  }
+
+  /* 代码编辑器高度减小 */
+  .monaco-editor {
+    font-size: 12px !important;
+  }
+
+  /* 卡片内边距减小 */
+  .n-card__content {
+    padding: 12px !important;
+  }
+
+  /* PageCard 头部换行 */
+  .page-card__header {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  /* StatCard 底部信息垂直排列 */
+  .stat-card__footer {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  /* 搜索表单项垂直排列 */
+  .search-form__item {
+    flex: 1 1 100% !important;
+  }
+}
+
+@media (max-width: 480px) {
+  /* 超小屏：表格字体缩小 */
+  .n-data-table-th,
+  .n-data-table-td {
+    padding: 6px 8px !important;
+    font-size: 12px !important;
+  }
+
+  /* 按钮文字隐藏，只留图标 */
+  .n-button--small .n-button__content {
+    font-size: 12px;
+  }
+
+  /* 超小屏卡片内边距进一步减小 */
+  .n-card__content {
+    padding: 10px !important;
+  }
+
+  /* 标题字体缩小 */
+  .n-card-header__title {
+    font-size: 14px !important;
+  }
+}

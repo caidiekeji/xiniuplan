@@ -1,0 +1,314 @@
+/* ============================================================
+   云枢面板 CloudPivot — Design Tokens
+   原创设计引擎推导：深夜数据中心 + 机柜指示灯 + 精密仪表盘
+   60-30-10 撞色：冷钢蓝基底 × 信号青绿 #1ba784 × 信号蓝
+   ============================================================ */
+
+/* ========== 浅色主题（默认 fallback） ========== */
+:root {
+  /* ---- 60% 基底（带冷钢蓝相的中性色） ---- */
+  --bg: #f4f6f9;
+  --bg2: #eceff4;
+  --paper: #ffffff;
+
+  /* ---- 30% 次要面 ---- */
+  --surface: #ffffff;
+  --surface2: #f0f3f8;
+  --surface3: #e8ecf2;
+  --line: #dde3ec;
+  --line-strong: #c8d1de;
+
+  /* ---- 10% 强调（撞色焦点） ---- */
+  --acc: #1ba784;          /* 信号青绿 — 主撞色，CTA/焦点 */
+  --acc-hover: #147760;
+  --acc-soft: #d5f3ea;
+  --acc2: #0d9488;         /* 信号青绿 — 签名/状态正常 */
+  --acc2-hover: #0f766e;
+  --acc2-soft: #ccfbf1;
+  --acc3: #2563eb;         /* 信息蓝 — hover 微点缀 */
+  --acc3-hover: #1d4ed8;
+
+  /* ---- 文字层级 ---- */
+  --ink: #1a2030;
+  --sub: #4a5568;
+  --faint: #8b95a8;
+
+  /* ---- 语义色 ---- */
+  --ok: #059669;
+  --ok-soft: #d1fae5;
+  --warn: #1ba784;
+  --warn-soft: #d5f3ea;
+  --err: #dc2626;
+  --err-soft: #fee2e2;
+  --info: #2563eb;
+  --info-soft: #dbeafe;
+  --overlay: rgba(0, 0, 0, 0.5);      /* 遮罩 */
+  --log-viewer-bg: #0e1117;           /* 日志/终端查看器 */
+  --log-viewer-text: #9ecb8a;
+
+  /* ---- Type Scale ---- */
+  --fs-display: 2rem;
+  --lh-display: 1.2;
+  --fw-display: 700;
+  --ls-display: -0.02em;
+
+  --fs-hero: 1.75rem;
+  --lh-hero: 1.3;
+  --fw-hero: 700;
+
+  --fs-stat: 1.25rem;
+  --fw-stat: 700;
+
+  --fs-headline: 1.5rem;
+  --lh-headline: 1.3;
+  --fw-headline: 600;
+  --ls-headline: -0.01em;
+
+  --fs-title: 1.125rem;
+  --lh-title: 1.4;
+  --fw-title: 600;
+  --ls-title: 0;
+
+  --fs-body: 0.875rem;
+  --lh-body: 1.6;
+  --fw-body: 400;
+  --ls-body: 0;
+
+  --fs-caption: 0.75rem;
+  --lh-caption: 1.5;
+  --fw-caption: 400;
+  --ls-caption: 0.02em;
+
+  --fs-mono: 0.8125rem;    /* 等宽数字 — 仪表盘刻度感 */
+  --lh-mono: 1.5;
+  --fw-mono: 500;
+
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', 'Cascadia Code', 'Fira Code', Consolas, monospace;
+
+  /* ---- 间距（4px 基准） ---- */
+  --space-0: 2px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+
+  /* ---- 圆角（克制，工业精密感） ---- */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  /* ---- 阴影 ---- */
+  --shadow-sm: 0 1px 2px rgba(26, 32, 48, 0.06);
+  --shadow-md: 0 2px 8px rgba(26, 32, 48, 0.08), 0 1px 2px rgba(26, 32, 48, 0.04);
+  --shadow-lg: 0 8px 24px rgba(26, 32, 48, 0.12), 0 2px 6px rgba(26, 32, 48, 0.06);
+
+  /* ---- 动效 ---- */
+  --t-fast: 0.15s;
+  --t-normal: 0.3s;
+  --t-slow: 0.5s;
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* ---- 断点 ---- */
+  --bp-sm: 640px;
+  --bp-md: 1024px;
+  --bp-lg: 1440px;
+
+  /* ---- z-index ---- */
+  --z-base: 0;
+  --z-sticky: 100;
+  --z-modal: 1000;
+
+  /* ---- 布局 ---- */
+  --sidebar-width: 220px;
+  --sidebar-width-collapsed: 60px;
+  --header-height: var(--size-lg);
+  --logo-size: 28px;
+  --menu-item-height: 40px;
+  --sidebar-icon-size: 20px;
+  --content-max-width: 1400px;
+  --chart-height: 320px;
+  --editor-height: 400px;
+  --border-width: 1px;
+  --login-max-width: 900px;
+  --led-dot-size: 4px;
+  --term-font-size: 14px;
+  --term-line-height: 1.2;
+  --term-magenta: #c084fc;
+  --term-cyan: #22d3ee;
+  --stat-bar-height: 2px;
+  --stat-value-min-height: 36px;
+  --hover-lift: -2px;
+  --search-width: 400px;
+  --drawer-width: 480px;
+  --modal-width-md: min(560px, 92vw);
+  --modal-width-lg: min(800px, 92vw);
+  --input-sm: 140px;
+  --input-md: 160px;
+  --input-lg: 200px;
+  --input-xl: 220px;
+  --input-2xl: 280px;
+  --input-3xl: 320px;
+
+  /* ---- 尺寸 Token（按钮/输入框/图标容器高度） ---- */
+  --size-sm: 32px;
+  --size-md: 44px;
+  --size-lg: 56px;
+
+  /* ---- 组件级 Token ---- */
+  --btn-bg: var(--acc);
+  --btn-fg: #ffffff;
+  --btn-bg-hover: var(--acc-hover);
+  --btn-border: transparent;
+  --btn-radius: var(--radius-md);
+
+  /* 彩色背景上的文字色（按钮文字、卡片强调文字等） */
+  --on-color: #ffffff;
+
+  --input-bg: var(--surface);
+  --input-border: var(--line);
+  --input-fg: var(--ink);
+  --input-focus-border: var(--acc);
+  --input-radius: var(--radius-md);
+
+  --card-bg: var(--surface);
+  --card-border: var(--line);
+  --card-shadow: var(--shadow-sm);
+  --card-radius: var(--radius-lg);
+
+  --tag-radius: var(--radius-sm);
+
+  /* ---- 终端主题（xterm） ---- */
+  --term-bg: var(--bg);
+  --term-fg: var(--ink);
+  --term-cursor: var(--acc);
+  --term-cursor-accent: var(--bg);
+  --term-selection: rgba(27, 167, 132, 0.3);
+  --term-black: var(--surface);
+  --term-red: var(--err);
+  --term-green: var(--ok);
+  --term-yellow: var(--warn);
+  --term-blue: var(--info);
+  --term-magenta: #c084fc;
+  --term-cyan: #22d3ee;
+  --term-white: var(--ink);
+  --term-bright-black: var(--faint);
+
+  /* ---- 签名元素：指示灯 ---- */
+  --led-size: 7px;
+  --led-pulse-duration: 2.5s;
+}
+
+/* ========== 深色主题 ========== */
+[data-theme='dark'] {
+  /* ---- 60% 基底（深墨蓝灰，带蓝相） ---- */
+  --bg: #0e1117;
+  --bg2: #131820;
+  --paper: #161b24;
+
+  /* ---- 30% 次要面 ---- */
+  --surface: #1a2030;
+  --surface2: #232b3d;
+  --surface3: #2a3348;
+  --line: #2a3348;
+  --line-strong: #3a4560;
+
+  /* ---- 10% 强调 ---- */
+  --acc: #1ba784;          /* 信号青绿 — 主撞色 */
+  --acc-hover: #23c096;
+  --acc-soft: rgba(27, 167, 132, 0.15);
+  --acc2: #2dd4a8;         /* 信号青绿 — 签名 */
+  --acc2-hover: #3ee8bb;
+  --acc2-soft: rgba(45, 212, 168, 0.12);
+  --acc3: #60a5fa;
+  --acc3-hover: #93c5fd;
+
+  /* ---- 文字层级 ---- */
+  --ink: #e8ecf2;
+  --sub: #9aa5b8;
+  --faint: #5c6678;
+
+  /* ---- 语义色 ---- */
+  --ok: #2dd4a8;
+  --ok-soft: rgba(45, 212, 168, 0.12);
+  --warn: #1ba784;
+  --warn-soft: rgba(27, 167, 132, 0.12);
+  --err: #e85d4d;
+  --err-soft: rgba(232, 93, 77, 0.12);
+  --overlay: rgba(0, 0, 0, 0.6);
+  --log-viewer-bg: #0e1117;
+  --log-viewer-text: #9ecb8a;
+  --info: #60a5fa;
+  --info-soft: rgba(96, 165, 250, 0.12);
+
+  /* ---- 阴影（深色微光） ---- */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.3);
+
+  /* ---- 组件级 Token（深色覆盖） ---- */
+  --btn-fg: #0e1117;
+  --on-color: #0e1117;
+  --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+/* ========== 移动端适配（≤768px） ========== */
+@media (max-width: 768px) {
+  :root {
+    /* 字体缩小 */
+    --fs-display: 1.5rem;
+    --fs-hero: 1.375rem;
+    --fs-stat: 1.125rem;
+    --fs-title: 1rem;
+    --fs-body: 0.8125rem;
+    --fs-caption: 0.6875rem;
+
+    /* 间距缩小 */
+    --space-1: 4px;
+    --space-2: 6px;
+    --space-3: 10px;
+    --space-4: 14px;
+    --space-5: 16px;
+    --space-6: 20px;
+    --space-7: 28px;
+    --space-8: 36px;
+
+    /* 布局 */
+    --header-height: 48px;
+    --menu-item-height: 36px;
+    --chart-height: 240px;
+    --editor-height: 300px;
+    --stat-value-min-height: 28px;
+    --drawer-width: 100vw;
+    --modal-width-md: 92vw;
+    --modal-width-lg: 94vw;
+    --search-width: 100%;
+
+    /* 输入框宽度自适应 */
+    --input-sm: 100%;
+    --input-md: 100%;
+    --input-lg: 100%;
+    --input-xl: 100%;
+    --input-2xl: 100%;
+    --input-3xl: 100%;
+
+    /* 圆角 */
+    --radius-lg: 10px;
+    --radius-md: 6px;
+  }
+}
+
+/* ========== 小屏适配（≤480px） ========== */
+@media (max-width: 480px) {
+  :root {
+    --fs-hero: 1.25rem;
+    --fs-stat: 1rem;
+    --space-5: 12px;
+    --chart-height: 200px;
+  }
+}

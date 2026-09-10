@@ -1,0 +1,17 @@
+{
+  "key": "redis",
+  "name": "Redis",
+  "version": "7.2",
+  "description": "Redis 是一个开源的内存数据结构存储系统，可用作数据库、缓存和消息代理，支持多种数据结构。",
+  "icon": "",
+  "category": "database",
+  "tags": ["redis", "cache", "nosql"],
+  "required_ports": [6379],
+  "env_params": [
+    {"key": "REDIS_PASSWORD", "label": "密码", "type": "password", "required": false},
+    {"key": "REDIS_PORT", "label": "端口", "type": "number", "required": false, "default": "6379"}
+  ],
+  "compose_file": "docker-compose.yml",
+  "min_memory_mb": 128,
+  "min_disk_gb": 1
+}

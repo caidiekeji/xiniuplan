@@ -1,0 +1,20 @@
+{
+  "key": "mysql",
+  "name": "MySQL",
+  "version": "8.0",
+  "description": "MySQL 是世界上最流行的开源关系型数据库管理系统，适用于各种 Web 应用和企业系统。",
+  "icon": "",
+  "category": "database",
+  "tags": ["mysql", "database", "rdbms"],
+  "required_ports": [3306],
+  "env_params": [
+    {"key": "MYSQL_ROOT_PASSWORD", "label": "Root 密码", "type": "password", "required": true},
+    {"key": "MYSQL_DATABASE", "label": "默认数据库", "type": "string", "required": false, "default": "app"},
+    {"key": "MYSQL_USER", "label": "默认用户", "type": "string", "required": false, "default": "app"},
+    {"key": "MYSQL_PASSWORD", "label": "默认用户密码", "type": "password", "required": false},
+    {"key": "MYSQL_PORT", "label": "端口", "type": "number", "required": false, "default": "3306"}
+  ],
+  "compose_file": "docker-compose.yml",
+  "min_memory_mb": 256,
+  "min_disk_gb": 2
+}

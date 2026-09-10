@@ -1,0 +1,18 @@
+{
+  "key": "jenkins",
+  "name": "Jenkins",
+  "version": "2.440",
+  "description": "Jenkins 是最流行的开源持续集成/持续交付（CI/CD）自动化服务器，支持构建、测试和部署流水线。",
+  "icon": "",
+  "category": "devtools",
+  "tags": ["ci", "cd", "devops", "pipeline"],
+  "required_ports": [8082, 50000],
+  "env_params": [
+    {"key": "JENKINS_PORT", "label": "Web 端口", "type": "number", "required": false, "default": "8082"},
+    {"key": "JENKINS_AGENT_PORT", "label": "Agent 端口", "type": "number", "required": false, "default": "50000"},
+    {"key": "JENKINS_OPTS", "label": "启动参数", "type": "string", "required": false, "default": "--prefix=/jenkins"}
+  ],
+  "compose_file": "docker-compose.yml",
+  "min_memory_mb": 1024,
+  "min_disk_gb": 5
+}

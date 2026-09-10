@@ -1,0 +1,14 @@
+version: "3.8"
+
+services:
+  typecho:
+    image: joyqiao/typecho:latest
+    container_name: typecho
+    restart: unless-stopped
+    ports:
+      - "{{TYPECHO_PORT}}:80"
+    volumes:
+      - typecho_data:/app/usr
+
+volumes:
+  typecho_data:

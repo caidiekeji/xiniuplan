@@ -1,0 +1,20 @@
+export default {
+  dashboard: '仪表盘',
+  website: '网站管理',
+  database: '数据库',
+  container: '容器管理',
+  appstore: '应用商店',
+  plugins: '插件管理',
+  file: '文件管理',
+  terminal: '终端',
+  cron: '计划任务',
+  monitor: '监控',
+  backup: '备份',
+  firewall: '防火墙',
+  ssh: 'SSH安全',
+  alert: '告警通知',
+  ssl: 'SSL证书',
+  users: '用户管理',
+  audit: '审计日志',
+  settings: '系统设置'
+}

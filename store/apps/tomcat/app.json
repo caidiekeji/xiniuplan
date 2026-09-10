@@ -1,0 +1,28 @@
+{
+  "key": "tomcat",
+  "name": "Tomcat",
+  "version": "10.1",
+  "description": "Apache Tomcat 是经典的 Java Web 应用服务器，部署 WAR 包的标准运行时。",
+  "category": "devtools",
+  "tags": [
+    "tomcat",
+    "java",
+    "war"
+  ],
+  "required_ports": [
+    8081
+  ],
+  "min_memory_mb": 256,
+  "min_disk_gb": 1,
+  "icon": "",
+  "env_params": [
+    {
+      "key": "TOMCAT_PORT",
+      "label": "端口",
+      "type": "number",
+      "required": false,
+      "default": "8081"
+    }
+  ],
+  "compose_file": "docker-compose.yml"
+}

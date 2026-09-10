@@ -1,0 +1,17 @@
+{
+  "key": "portainer",
+  "name": "Portainer CE",
+  "version": "2.19.0",
+  "description": "Portainer 是一个轻量级的 Docker 管理 UI，提供容器、镜像、网络、卷等可视化管理功能。",
+  "icon": "",
+  "category": "devtools",
+  "tags": ["docker", "management", "ui"],
+  "required_ports": [9000, 9443],
+  "env_params": [
+    {"key": "PORTAINER_PORT", "label": "Web 端口", "type": "number", "required": false, "default": "9000"},
+    {"key": "PORTAINER_HTTPS_PORT", "label": "HTTPS 端口", "type": "number", "required": false, "default": "9443"}
+  ],
+  "compose_file": "docker-compose.yml",
+  "min_memory_mb": 128,
+  "min_disk_gb": 1
+}

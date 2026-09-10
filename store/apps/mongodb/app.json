@@ -1,0 +1,40 @@
+{
+  "key": "mongodb",
+  "name": "MongoDB",
+  "version": "7.0",
+  "description": "MongoDB 是流行的文档型 NoSQL 数据库，以 JSON 风格文档存储数据，适合快速迭代的应用开发。",
+  "category": "database",
+  "tags": [
+    "mongodb",
+    "nosql",
+    "database"
+  ],
+  "required_ports": [
+    27017
+  ],
+  "min_memory_mb": 256,
+  "min_disk_gb": 2,
+  "icon": "",
+  "env_params": [
+    {
+      "key": "MONGO_ROOT_USER",
+      "label": "Root 用户",
+      "type": "string",
+      "required": true
+    },
+    {
+      "key": "MONGO_ROOT_PASSWORD",
+      "label": "Root 密码",
+      "type": "password",
+      "required": true
+    },
+    {
+      "key": "MONGO_PORT",
+      "label": "端口",
+      "type": "number",
+      "required": false,
+      "default": "27017"
+    }
+  ],
+  "compose_file": "docker-compose.yml"
+}

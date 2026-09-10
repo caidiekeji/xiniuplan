@@ -1,0 +1,17 @@
+{
+  "key": "gitea",
+  "name": "Gitea",
+  "version": "1.21.0",
+  "description": "Gitea 是一个轻量级的自托管 Git 服务，类似于 GitHub，提供代码仓库管理、Issue、PR、Wiki 等功能。",
+  "icon": "",
+  "category": "devtools",
+  "tags": ["git", "vcs", "repository"],
+  "required_ports": [3000, 2222],
+  "env_params": [
+    {"key": "GITEA_PORT", "label": "Web 端口", "type": "number", "required": false, "default": "3000"},
+    {"key": "GITEA_SSH_PORT", "label": "SSH 端口", "type": "number", "required": false, "default": "2222"}
+  ],
+  "compose_file": "docker-compose.yml",
+  "min_memory_mb": 256,
+  "min_disk_gb": 2
+}

@@ -1,0 +1,20 @@
+{
+  "key": "nextcloud",
+  "name": "Nextcloud",
+  "version": "28.0",
+  "description": "Nextcloud 是一个自托管的文件同步和共享平台，提供云存储、日历、联系人、协作办公等功能。",
+  "icon": "",
+  "category": "productivity",
+  "tags": ["cloud", "storage", "files", "sync"],
+  "required_ports": [8081],
+  "env_params": [
+    {"key": "MYSQL_ROOT_PASSWORD", "label": "MySQL Root 密码", "type": "password", "required": true},
+    {"key": "MYSQL_DATABASE", "label": "数据库名", "type": "string", "required": false, "default": "nextcloud"},
+    {"key": "MYSQL_USER", "label": "数据库用户", "type": "string", "required": false, "default": "nextcloud"},
+    {"key": "MYSQL_PASSWORD", "label": "数据库密码", "type": "password", "required": true},
+    {"key": "NEXTCLOUD_PORT", "label": "Web 端口", "type": "number", "required": false, "default": "8081"}
+  ],
+  "compose_file": "docker-compose.yml",
+  "min_memory_mb": 512,
+  "min_disk_gb": 10
+}

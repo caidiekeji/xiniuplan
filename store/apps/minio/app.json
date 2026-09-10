@@ -1,0 +1,19 @@
+{
+  "key": "minio",
+  "name": "MinIO",
+  "version": "RELEASE.2024-01-01",
+  "description": "MinIO 是一个高性能的分布式对象存储系统，兼容 Amazon S3 API，适用于大数据、机器学习和云原生应用的存储需求。",
+  "icon": "",
+  "category": "storage",
+  "tags": ["s3", "object-storage", "storage"],
+  "required_ports": [9000, 9001],
+  "env_params": [
+    {"key": "MINIO_ROOT_USER", "label": "Root 用户", "type": "string", "required": true, "default": "minioadmin"},
+    {"key": "MINIO_ROOT_PASSWORD", "label": "Root 密码", "type": "password", "required": true},
+    {"key": "MINIO_API_PORT", "label": "API 端口", "type": "number", "required": false, "default": "9000"},
+    {"key": "MINIO_CONSOLE_PORT", "label": "控制台端口", "type": "number", "required": false, "default": "9001"}
+  ],
+  "compose_file": "docker-compose.yml",
+  "min_memory_mb": 256,
+  "min_disk_gb": 5
+}

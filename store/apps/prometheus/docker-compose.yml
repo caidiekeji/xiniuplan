@@ -1,0 +1,14 @@
+version: "3.8"
+
+services:
+  prometheus:
+    image: prom/prometheus:v2.52.0
+    container_name: prometheus
+    restart: unless-stopped
+    ports:
+      - "{{PROM_PORT}}:9090"
+    volumes:
+      - prom_data:/prometheus
+
+volumes:
+  prom_data:

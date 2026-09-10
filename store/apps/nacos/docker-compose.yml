@@ -1,0 +1,17 @@
+version: "3.8"
+
+services:
+  nacos:
+    image: nacos/nacos-server:v2.3.2
+    container_name: nacos
+    restart: unless-stopped
+    ports:
+      - "{{NACOS_PORT}}:8848"
+    environment:
+      MODE: standalone
+      NACOS_AUTH_PASSWORD: "{{NACOS_PASSWORD}}"
+    volumes:
+      - nacos_data:/home/nacos/data
+
+volumes:
+  nacos_data:

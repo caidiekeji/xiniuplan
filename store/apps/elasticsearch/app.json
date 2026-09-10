@@ -1,0 +1,35 @@
+{
+  "key": "elasticsearch",
+  "name": "Elasticsearch",
+  "version": "8.13",
+  "description": "Elasticsearch 是分布式搜索与分析引擎，广泛用于全文检索、日志分析与可观测性场景。",
+  "category": "middleware",
+  "tags": [
+    "elasticsearch",
+    "search",
+    "logs"
+  ],
+  "required_ports": [
+    9200
+  ],
+  "min_memory_mb": 1024,
+  "min_disk_gb": 4,
+  "icon": "",
+  "env_params": [
+    {
+      "key": "ES_PORT",
+      "label": "端口",
+      "type": "number",
+      "required": false,
+      "default": "9200"
+    },
+    {
+      "key": "ES_JAVA_OPTS",
+      "label": "JVM 内存",
+      "type": "string",
+      "required": false,
+      "default": "-Xms512m -Xmx512m"
+    }
+  ],
+  "compose_file": "docker-compose.yml"
+}

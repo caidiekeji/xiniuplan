@@ -1,0 +1,34 @@
+{
+  "key": "nacos",
+  "name": "Nacos",
+  "version": "2.3",
+  "description": "Nacos 是阿里开源的服务注册发现与配置管理中心，微服务架构常用组件。",
+  "category": "middleware",
+  "tags": [
+    "nacos",
+    "registry",
+    "config"
+  ],
+  "required_ports": [
+    8848
+  ],
+  "min_memory_mb": 512,
+  "min_disk_gb": 2,
+  "icon": "",
+  "env_params": [
+    {
+      "key": "NACOS_PORT",
+      "label": "端口",
+      "type": "number",
+      "required": false,
+      "default": "8848"
+    },
+    {
+      "key": "NACOS_PASSWORD",
+      "label": "控制台密码",
+      "type": "password",
+      "required": false
+    }
+  ],
+  "compose_file": "docker-compose.yml"
+}

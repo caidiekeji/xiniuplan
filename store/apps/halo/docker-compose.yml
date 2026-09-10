@@ -1,0 +1,14 @@
+version: "3.8"
+
+services:
+  halo:
+    image: halohub/halo:2.17.0
+    container_name: halo
+    restart: unless-stopped
+    ports:
+      - "{{HALO_PORT}}:8090"
+    volumes:
+      - halo_data:/root/.halo2
+
+volumes:
+  halo_data:

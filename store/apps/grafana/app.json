@@ -1,0 +1,28 @@
+{
+  "key": "grafana",
+  "name": "Grafana",
+  "version": "10.4",
+  "description": "Grafana 是开源可视化与监控平台，支持丰富的数据源与仪表盘，是可观测性的标配。",
+  "category": "monitor",
+  "tags": [
+    "grafana",
+    "dashboard",
+    "monitor"
+  ],
+  "required_ports": [
+    3000
+  ],
+  "min_memory_mb": 128,
+  "min_disk_gb": 1,
+  "icon": "",
+  "env_params": [
+    {
+      "key": "GRAFANA_PORT",
+      "label": "端口",
+      "type": "number",
+      "required": false,
+      "default": "3000"
+    }
+  ],
+  "compose_file": "docker-compose.yml"
+}

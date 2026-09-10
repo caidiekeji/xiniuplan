@@ -1,0 +1,20 @@
+export default {
+  dashboard: 'Dashboard',
+  website: 'Websites',
+  database: 'Databases',
+  container: 'Containers',
+  appstore: 'App Store',
+  plugins: 'Plugins',
+  file: 'File Manager',
+  terminal: 'Terminal',
+  cron: 'Cron Jobs',
+  monitor: 'Monitoring',
+  backup: 'Backups',
+  firewall: 'Firewall',
+  ssh: 'SSH Security',
+  alert: 'Alerts',
+  ssl: 'SSL Certificates',
+  users: 'User Management',
+  audit: 'Audit Logs',
+  settings: 'System Settings'
+}

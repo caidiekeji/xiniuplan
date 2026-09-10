@@ -1,0 +1,48 @@
+{
+  "key": "rabbitmq",
+  "name": "RabbitMQ",
+  "version": "3.13",
+  "description": "RabbitMQ 是最广泛部署的开源消息代理，支持多种消息协议，用于应用解耦与异步任务。",
+  "category": "middleware",
+  "tags": [
+    "rabbitmq",
+    "mq",
+    "message-queue"
+  ],
+  "required_ports": [
+    5672,
+    15672
+  ],
+  "min_memory_mb": 256,
+  "min_disk_gb": 1,
+  "icon": "",
+  "env_params": [
+    {
+      "key": "RABBITMQ_USER",
+      "label": "管理用户",
+      "type": "string",
+      "required": true
+    },
+    {
+      "key": "RABBITMQ_PASSWORD",
+      "label": "管理密码",
+      "type": "password",
+      "required": true
+    },
+    {
+      "key": "RABBITMQ_PORT",
+      "label": "AMQP 端口",
+      "type": "number",
+      "required": false,
+      "default": "5672"
+    },
+    {
+      "key": "RABBITMQ_MGMT_PORT",
+      "label": "管理界面端口",
+      "type": "number",
+      "required": false,
+      "default": "15672"
+    }
+  ],
+  "compose_file": "docker-compose.yml"
+}

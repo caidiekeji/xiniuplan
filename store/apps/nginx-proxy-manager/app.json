@@ -1,0 +1,18 @@
+{
+  "key": "nginx-proxy-manager",
+  "name": "Nginx Proxy Manager",
+  "version": "2.11.0",
+  "description": "Nginx Proxy Manager 是一个基于 Nginx 的反向代理管理面板，提供可视化的域名管理、SSL 证书自动签发和访问控制。",
+  "icon": "",
+  "category": "network",
+  "tags": ["nginx", "proxy", "reverse-proxy", "ssl"],
+  "required_ports": [80, 81, 443],
+  "env_params": [
+    {"key": "NPM_PORT", "label": "管理面板端口", "type": "number", "required": false, "default": "81"},
+    {"key": "NPM_HTTP_PORT", "label": "HTTP 端口", "type": "number", "required": false, "default": "80"},
+    {"key": "NPM_HTTPS_PORT", "label": "HTTPS 端口", "type": "number", "required": false, "default": "443"}
+  ],
+  "compose_file": "docker-compose.yml",
+  "min_memory_mb": 128,
+  "min_disk_gb": 2
+}

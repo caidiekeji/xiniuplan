@@ -1,0 +1,44 @@
+# 依赖与构建产物
+node_modules/
+frontend/dist/
+*.gz
+backend/cloudpivot
+backend/bin/
+
+# 运行时数据与密钥（敏感信息不入库）
+*.db
+*.pem
+backend/data/
+backend/logs/
+
+# 测试与临时脚本
+check_api.py
+check_api2.py
+check_password.py
+deploy_fix.py
+scripts/check_*.py
+
+# 日志与临时文件
+*.log
+logs/
+tmp/
+.cache/
+
+# IDE / 工作区本地数据
+.workbuddy/
+.trae/
+.idea/
+.vscode/
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 运行时数据
+backend/runtime/
+
+# vite 临时文件
+frontend/vite.config.ts.timestamp-*.mjs
+
+# .tmp 临时目录
+.tmp/

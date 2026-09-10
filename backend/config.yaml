@@ -1,0 +1,20 @@
+# 犀牛面板配置文件
+server:
+  port: 8888
+  mode: debug          # debug | release
+  read_timeout: 60
+  write_timeout: 60
+
+database:
+  path: ./data/cloudpivot.db
+
+jwt:
+  key_dir: ./data/jwt
+  access_token_ttl: 7200    # 2小时
+  refresh_token_ttl: 604800 # 7天
+
+log:
+  level: info
+
+monitor:
+  interval: 15  # 采集间隔（秒）

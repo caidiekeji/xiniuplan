@@ -1,0 +1,28 @@
+{
+  "key": "prometheus",
+  "name": "Prometheus",
+  "version": "2.52",
+  "description": "Prometheus 是开源的系统监控与告警工具，基于时序数据库，常与 Grafana 搭配使用。",
+  "category": "monitor",
+  "tags": [
+    "prometheus",
+    "metrics",
+    "monitor"
+  ],
+  "required_ports": [
+    9090
+  ],
+  "min_memory_mb": 256,
+  "min_disk_gb": 2,
+  "icon": "",
+  "env_params": [
+    {
+      "key": "PROM_PORT",
+      "label": "端口",
+      "type": "number",
+      "required": false,
+      "default": "9090"
+    }
+  ],
+  "compose_file": "docker-compose.yml"
+}

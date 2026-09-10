@@ -1,0 +1,28 @@
+{
+  "key": "typecho",
+  "name": "Typecho",
+  "version": "1.2",
+  "description": "Typecho 是轻量级 PHP 博客程序，资源占用小、速度快，适合个人博客与极简建站。",
+  "category": "website",
+  "tags": [
+    "typecho",
+    "blog",
+    "php"
+  ],
+  "required_ports": [
+    8080
+  ],
+  "min_memory_mb": 128,
+  "min_disk_gb": 1,
+  "icon": "",
+  "env_params": [
+    {
+      "key": "TYPECHO_PORT",
+      "label": "端口",
+      "type": "number",
+      "required": false,
+      "default": "8080"
+    }
+  ],
+  "compose_file": "docker-compose.yml"
+}

@@ -1,0 +1,20 @@
+{
+  "key": "wordpress",
+  "name": "WordPress",
+  "version": "6.5.0",
+  "description": "WordPress 是全球最流行的开源内容管理系统（CMS），用于创建博客、网站和电商平台。",
+  "icon": "",
+  "category": "website",
+  "tags": ["blog", "cms", "website"],
+  "required_ports": [8080],
+  "env_params": [
+    {"key": "MYSQL_ROOT_PASSWORD", "label": "MySQL Root 密码", "type": "password", "required": true},
+    {"key": "MYSQL_DATABASE", "label": "数据库名", "type": "string", "required": false, "default": "wordpress"},
+    {"key": "MYSQL_USER", "label": "数据库用户", "type": "string", "required": false, "default": "wordpress"},
+    {"key": "MYSQL_PASSWORD", "label": "数据库密码", "type": "password", "required": true},
+    {"key": "WORDPRESS_PORT", "label": "Web 端口", "type": "number", "required": false, "default": "8080"}
+  ],
+  "compose_file": "docker-compose.yml",
+  "min_memory_mb": 512,
+  "min_disk_gb": 5
+}

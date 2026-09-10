@@ -1,0 +1,31 @@
+# 构建上下文瘦身：排除无关文件，加速镜像构建
+frontend/node_modules/
+frontend/dist/
+backend/cloudpivot
+backend/bin/
+backend/data/
+*.db
+*.pem
+*.gz
+*.log
+logs/
+
+# 测试与临时脚本
+check_api.py
+check_api2.py
+check_password.py
+deploy_fix.py
+
+# IDE / 工作区
+.workbuddy/
+.trae/
+.idea/
+.vscode/
+.git/
+.github/
+
+# 文档与杂项
+docs/
+README.md
+LICENSE
+*.md
