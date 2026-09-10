@@ -3,12 +3,16 @@ package main
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
+
+	"cloudpivot/web"
 
 	"cloudpivot/internal/api"
 	"cloudpivot/internal/config"
@@ -178,6 +182,36 @@ func main() {
 	// 健康检查
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ok", "version": monitorsvc.PanelVersion})
+	})
+
+	// 前端 SPA：服务嵌入的静态文件，未匹配路径回退 index.html（history 路由）
+	// /api 前缀的未知路径仍返回 404，不回退
+	distFS, err := web.Dist()
+	if err != nil {
+		slog.Error("[犀牛面板] 嵌入前端资源不可用", "error", err)
+		os.Exit(1)
+	}
+	fileServer := http.FileServer(http.FS(distFS))
+	r.NoRoute(func(c *gin.Context) {
+		p := c.Request.URL.Path
+		if strings.HasPrefix(p, "/api/") || p == "/health" {
+			c.JSON(404, gin.H{"code": 404, "message": "not found"})
+			return
+		}
+		// 尝试提供真实文件（assets、favicon 等）
+		f, err := distFS.Open(strings.TrimPrefix(p, "/"))
+		if err == nil {
+			f.Close()
+			fileServer.ServeHTTP(c.Writer, c.Request)
+			return
+		}
+		// SPA 回退
+		index, err2 := fs.ReadFile(distFS, "index.html")
+		if err2 != nil {
+			c.String(500, "frontend assets unavailable")
+			return
+		}
+		c.Data(200, "text/html; charset=utf-8", index)
 	})
 
 	// 6. 启动 HTTP/HTTPS 服务

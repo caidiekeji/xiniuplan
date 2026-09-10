@@ -1,13 +1,19 @@
 version: '3.8'
 
+# 云枢面板 - 单镜像部署
+# 一个容器同时提供页面（SPA）与 API/WebSocket，无需独立前端容器。
+# 使用 GHCR 镜像：
+#   docker compose pull && docker compose up -d
+# 或本地构建：
+#   docker compose up -d --build
+
 services:
-  # ==================== 后端服务 ====================
-  backend:
+  panel:
     build:
       context: .
-      dockerfile: Dockerfile.backend
-    image: cloudpivot-backend:latest
-    container_name: cloudpivot-backend
+      dockerfile: Dockerfile
+    image: ghcr.io/caidiekeji/xiniupanl:latest
+    container_name: xiniupanl
     restart: always
     ports:
       - "8888:8888"
@@ -16,16 +22,12 @@ services:
       # 管理员初始密码（首次启动时生效，后续修改以数据库为准）
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin123}
     volumes:
-      # 持久化数据：SQLite 数据库、JWT 密钥
-      - backend-data:/opt/cloudpivot/data
-      # 应用定义文件
-      - backend-store:/opt/cloudpivot/store
-      # 网站文件根目录
-      - www-data:/www
+      # 持久化数据：SQLite 数据库、JWT 密钥、网站文件根目录
+      - panel-data:/app/data
+      - panel-store:/app/store
+      - panel-www:/app/www
       # 挂载 Docker Socket（容器管理、数据库实例等功能必需）
       - /var/run/docker.sock:/var/run/docker.sock
-    networks:
-      - cloudpivot
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8888/health"]
       interval: 30s
@@ -33,33 +35,12 @@ services:
       retries: 3
       start_period: 10s
 
-  # ==================== 前端服务 ====================
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    image: cloudpivot-frontend:latest
-    container_name: cloudpivot-frontend
-    restart: always
-    ports:
-      - "8080:80"
-    depends_on:
-      backend:
-        condition: service_healthy
-    networks:
-      - cloudpivot
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-
   # ==================== 可选：MySQL ====================
   # 使用 --profile database 启动：
   #   docker compose --profile database up -d
   mysql:
     image: mysql:8.0
-    container_name: cloudpivot-mysql
+    container_name: xiniupanl-mysql
     restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-cloudpivot}
@@ -67,30 +48,30 @@ services:
     volumes:
       - mysql-data:/var/lib/mysql
     networks:
-      - cloudpivot
+      - xiniupanl
     profiles:
       - database
 
   # ==================== 可选：Redis ====================
   redis:
     image: redis:7-alpine
-    container_name: cloudpivot-redis
+    container_name: xiniupanl-redis
     restart: unless-stopped
     command: redis-server --appendonly yes
     volumes:
       - redis-data:/data
     networks:
-      - cloudpivot
+      - xiniupanl
     profiles:
       - database
 
 # ==================== 数据卷 ====================
 volumes:
-  backend-data:
+  panel-data:
     driver: local
-  backend-store:
+  panel-store:
     driver: local
-  www-data:
+  panel-www:
     driver: local
   mysql-data:
     driver: local
@@ -99,5 +80,5 @@ volumes:
 
 # ==================== 网络 ====================
 networks:
-  cloudpivot:
+  xiniupanl:
     driver: bridge

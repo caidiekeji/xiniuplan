@@ -42,3 +42,13 @@ frontend/vite.config.ts.timestamp-*.mjs
 
 # .tmp 临时目录
 .tmp/
+
+# 前端嵌入产物（构建时注入，占位 index.html 保留跟踪）
+backend/web/dist/*
+!backend/web/dist/index.html
+
+# 本地测试产物
+rhinopanel-test.exe
+panel-test.log
+backend/rhinopanel-test.exe
+backend/panel-test.log
