@@ -148,6 +148,7 @@ func ResizePTY(session *ssh.Session, cols, rows int) error {
 
 // StreamOutput 将 SSH stdout 持续推送到 WebSocket
 // 阻塞运行，直到输出结束或连接关闭
+// RawMode（ZMODEM 透传）时使用 BinaryMessage 原样转发；RecordFile 开启时同步录制
 func StreamOutput(conn *websocket.Conn, stdout io.Reader, session *TerminalSession) {
 	buf := make([]byte, 4096)
 	for {
@@ -157,12 +158,31 @@ func StreamOutput(conn *websocket.Conn, stdout io.Reader, session *TerminalSessi
 		n, err := stdout.Read(buf)
 		if n > 0 {
 			session.Touch()
+
+			// 会话录制（T-006）
+			session.mu.Lock()
+			recordFile := session.RecordFile
+			session.mu.Unlock()
+			if recordFile != nil {
+				_, _ = recordFile.Write(buf[:n])
+			}
+
 			session.mu.Lock()
 			closed := session.closed
+			rawMode := session.RawMode
 			session.mu.Unlock()
 			if closed {
 				return
 			}
+
+			if rawMode {
+				// ZMODEM 原始字节透传（T-005）
+				if err := conn.WriteMessage(websocket.BinaryMessage, buf[:n]); err != nil {
+					return
+				}
+				continue
+			}
+
 			msg := dto.TerminalMessage{
 				Type: "output",
 				Data: string(buf[:n]),

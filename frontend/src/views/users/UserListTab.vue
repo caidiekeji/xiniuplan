@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, h, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   NButton, NIcon, NForm, NFormItem, NInput, NSelect, NSwitch,
-  NSpace, NAvatar, useMessage
+  NSpace, NAvatar
 } from 'naive-ui'
+import { useMessage } from '@/composables/useMessage'
 import {
   AddOutline, CreateOutline, KeyOutline, TrashOutline,
   PlayOutline, StopOutline, SearchOutline
@@ -21,14 +23,15 @@ import { useAuthStore } from '@/stores/auth'
 import type { DataTableColumns } from 'naive-ui'
 
 const message = useMessage()
+const { t } = useI18n()
 const authStore = useAuthStore()
 
 /* ========== 状态映射 ========== */
-const roleStatusMap: Record<string, { status: StatusType; text: string }> = {
-  super_admin: { status: 'warning', text: '超级管理员' },
-  admin: { status: 'running', text: '管理员' },
-  user: { status: 'stopped', text: '普通用户' }
-}
+const roleStatusMap = computed<Record<string, { status: StatusType; text: string }>>(() => ({
+  super_admin: { status: 'warning', text: t('userList.roles.superAdmin') },
+  admin: { status: 'running', text: t('userList.roles.admin') },
+  user: { status: 'stopped', text: t('userList.roles.user') }
+}))
 
 /* ========== 列表状态 ========== */
 const loading = ref(false)
@@ -63,7 +66,7 @@ async function loadUsers() {
       total.value = 0
     }
   } catch (err: any) {
-    message.error(err.message || '加载用户列表失败')
+    message.error(err.message || t('userList.loadError'))
   } finally {
     loading.value = false
   }
@@ -99,7 +102,7 @@ async function loadRoles() {
 /* ========== 表格列 ========== */
 const columns = computed(() => [
   {
-    title: '用户名',
+    title: t('userList.columns.username'),
     key: 'username',
     width: 200,
     render: (row: any) => h('div', { class: 'user-cell' }, [
@@ -112,11 +115,11 @@ const columns = computed(() => [
     ])
   },
   {
-    title: '角色',
+    title: t('userList.columns.role'),
     key: 'role',
     width: 130,
     render: (row: any) => {
-      const cfg = roleStatusMap[row.role] || roleStatusMap.user
+      const cfg = roleStatusMap.value[row.role] || roleStatusMap.value.user
       return h(StatusTag, { status: cfg.status, text: cfg.text })
     }
   },
@@ -126,20 +129,20 @@ const columns = computed(() => [
     width: 110,
     render: (row: any) => h(StatusTag, {
       status: row.totp_enabled ? 'running' : 'stopped',
-      text: row.totp_enabled ? '已启用' : '未启用'
+      text: row.totp_enabled ? t('userList.status.enabled') : t('userList.status.disabled')
     })
   },
   {
-    title: '状态',
+    title: t('userList.columns.status'),
     key: 'status',
     width: 100,
     render: (row: any) => h(StatusTag, {
       status: row.status === 'active' ? 'running' : 'error',
-      text: row.status === 'active' ? '正常' : '已禁用'
+      text: row.status === 'active' ? t('userList.status.active') : t('userList.status.inactive')
     })
   },
   {
-    title: '最后登录',
+    title: t('userList.columns.lastLogin'),
     key: 'last_login_at',
     width: 170,
     render: (row: any) => h('span', {
@@ -148,7 +151,7 @@ const columns = computed(() => [
     }, row.last_login_at || '—')
   },
   {
-    title: '创建时间',
+    title: t('userList.columns.createdAt'),
     key: 'created_at',
     width: 170,
     render: (row: any) => h('span', {
@@ -157,7 +160,7 @@ const columns = computed(() => [
     }, row.created_at || '—')
   },
   {
-    title: '操作',
+    title: t('userList.columns.actions'),
     key: 'actions',
     width: 300,
     render: (row: any) => {
@@ -173,7 +176,7 @@ const columns = computed(() => [
             onClick: () => openEdit(row)
           }, {
             icon: () => h(NIcon, null, { default: () => h(CreateOutline) }),
-            default: () => '编辑'
+            default: () => t('userList.actions.edit')
           }),
           h(NButton, {
             size: 'tiny',
@@ -181,7 +184,7 @@ const columns = computed(() => [
             onClick: () => openPassword(row)
           }, {
             icon: () => h(NIcon, null, { default: () => h(KeyOutline) }),
-            default: () => '改密'
+            default: () => t('userList.actions.password')
           }),
           h(NButton, {
             size: 'tiny',
@@ -192,7 +195,7 @@ const columns = computed(() => [
             onClick: () => row.status === 'active' ? handleDisable(row.id) : handleEnable(row.id)
           }, {
             icon: () => h(NIcon, null, { default: () => h(row.status === 'active' ? StopOutline : PlayOutline) }),
-            default: () => row.status === 'active' ? '禁用' : '启用'
+            default: () => row.status === 'active' ? t('userList.actions.disable') : t('userList.actions.enable')
           }),
           h(NButton, {
             size: 'tiny',
@@ -203,7 +206,7 @@ const columns = computed(() => [
             onClick: () => openDelete(row)
           }, {
             icon: () => h(NIcon, null, { default: () => h(TrashOutline) }),
-            default: () => '删除'
+            default: () => t('userList.actions.delete')
           })
         ]
       })
@@ -218,10 +221,10 @@ async function handleEnable(id: number) {
   actionLoadingId.value = id
   try {
     await enableUser(id)
-    message.success('用户已启用')
+    message.success(t('userList.enableSuccess'))
     loadUsers()
   } catch (err: any) {
-    message.error(err.message || '启用失败')
+    message.error(err.message || t('userList.enableFailed'))
   } finally {
     actionLoadingId.value = null
   }
@@ -231,10 +234,10 @@ async function handleDisable(id: number) {
   actionLoadingId.value = id
   try {
     await disableUser(id)
-    message.success('用户已禁用')
+    message.success(t('userList.disableSuccess'))
     loadUsers()
   } catch (err: any) {
-    message.error(err.message || '禁用失败')
+    message.error(err.message || t('userList.disableFailed'))
   } finally {
     actionLoadingId.value = null
   }
@@ -258,32 +261,32 @@ const form = reactive({
 const formRules = computed(() => ({
   username: {
     required: true,
-    message: '请输入用户名',
+    message: t('userList.hints.enterUsername'),
     trigger: 'blur'
   },
   password: isEdit.value
     ? {}
     : {
         required: true,
-        message: '请输入密码',
+        message: t('userList.hints.enterPassword'),
         trigger: 'blur'
       },
   confirmPassword: isEdit.value
     ? {}
     : {
         required: true,
-        message: '请确认密码',
+        message: t('userList.hints.confirmPassword'),
         trigger: 'blur',
         validator: (_rule: any, value: string) => {
           if (value !== form.password) {
-            return new Error('两次输入的密码不一致')
+            return new Error(t('userList.hints.passwordMismatch'))
           }
           return true
         }
       },
   role_id: {
     required: true,
-    message: '请选择角色',
+    message: t('userList.hints.selectRole'),
     trigger: 'change'
   }
 }))
@@ -321,7 +324,7 @@ async function handleFormSubmit() {
   }
 
   if (form.role_id === null) {
-    message.warning('请选择角色')
+    message.warning(t('userList.hints.selectRole'))
     return
   }
 
@@ -336,7 +339,7 @@ async function handleFormSubmit() {
         data.password = form.password
       }
       await updateUser(editId.value, data)
-      message.success('用户已更新')
+      message.success(t('userList.messages.updated'))
     } else {
       await createUser({
         username: form.username,
@@ -344,12 +347,12 @@ async function handleFormSubmit() {
         role_id: form.role_id,
         status: form.status ? 'active' : 'disabled'
       })
-      message.success('用户已创建')
+      message.success(t('userList.messages.created'))
     }
     showForm.value = false
     loadUsers()
   } catch (err: any) {
-    message.error(err.message || '保存失败')
+    message.error(err.message || t('userList.messages.saveFailed'))
   } finally {
     formLoading.value = false
   }
@@ -367,24 +370,24 @@ const pwdForm = reactive({
   confirmPassword: ''
 })
 
-const pwdRules = {
+const pwdRules = computed(() => ({
   newPassword: {
     required: true,
-    message: '请输入新密码',
+    message: t('userList.hints.enterNewPassword'),
     trigger: 'blur'
   },
   confirmPassword: {
     required: true,
-    message: '请确认新密码',
+    message: t('userList.hints.confirmNewPassword'),
     trigger: 'blur',
     validator: (_rule: any, value: string) => {
       if (value !== pwdForm.newPassword) {
-        return new Error('两次输入的密码不一致')
+        return new Error(t('userList.hints.passwordMismatch'))
       }
       return true
     }
   }
-}
+}))
 
 const passwordStrength = computed(() => {
   const pwd = pwdForm.newPassword
@@ -394,9 +397,9 @@ const passwordStrength = computed(() => {
   if (/[a-z]/.test(pwd) && /[A-Z]/.test(pwd)) score++
   if (/\d/.test(pwd)) score++
   if (/[^a-zA-Z0-9]/.test(pwd)) score++
-  if (score <= 1) return { level: 1, text: '弱', color: 'var(--err)' }
-  if (score <= 2) return { level: 2, text: '中', color: 'var(--warn)' }
-  return { level: 3, text: '强', color: 'var(--ok)' }
+  if (score <= 1) return { level: 1, text: t('userList.strength.weak'), color: 'var(--err)' }
+  if (score <= 2) return { level: 2, text: t('userList.strength.medium'), color: 'var(--warn)' }
+  return { level: 3, text: t('userList.strength.strong'), color: 'var(--ok)' }
 })
 
 function openPassword(row: any) {
@@ -420,10 +423,10 @@ async function handlePwdSubmit() {
     await updatePassword(pwdUserId.value, {
       new_password: pwdForm.newPassword
     })
-    message.success('密码已修改')
+    message.success(t('userList.messages.passwordChanged'))
     showPwd.value = false
   } catch (err: any) {
-    message.error(err.message || '修改密码失败')
+    message.error(err.message || t('userList.messages.passwordFailed'))
   } finally {
     pwdLoading.value = false
   }
@@ -446,11 +449,11 @@ async function handleDeleteConfirm() {
   deleteLoading.value = true
   try {
     await deleteUser(deleteId.value)
-    message.success('用户已删除')
+    message.success(t('userList.messages.deleted'))
     showDelete.value = false
     loadUsers()
   } catch (err: any) {
-    message.error(err.message || '删除失败')
+    message.error(err.message || t('userList.messages.deleteFailed'))
   } finally {
     deleteLoading.value = false
   }
@@ -463,13 +466,13 @@ onMounted(() => {
 </script>
 
 <template>
-  <PageCard title="用户列表" subtitle="管理系统用户、角色分配与账户状态">
+  <PageCard :title="t('userList.title')" :subtitle="t('userList.subtitle')">
     <template #extra>
       <NButton type="primary" @click="openCreate">
         <template #icon>
           <NIcon><AddOutline /></NIcon>
         </template>
-        创建用户
+        {{ t('userList.createUser') }}
       </NButton>
     </template>
 
@@ -477,7 +480,7 @@ onMounted(() => {
     <div class="user-search">
       <NInput
         v-model:value="keyword"
-        placeholder="搜索用户名..."
+        :placeholder="t('userList.searchPlaceholder')"
         clearable
         style="width: var(--input-2xl)"
       >
@@ -499,57 +502,57 @@ onMounted(() => {
   <!-- 创建/编辑用户对话框 -->
   <ModalForm
     :show="showForm"
-    :title="isEdit ? '编辑用户' : '创建用户'"
+    :title="isEdit ? t('userList.editUser') : t('userList.createUser')"
     :loading="formLoading"
     :width="520"
     @update:show="(v: boolean) => (showForm = v)"
     @submit="handleFormSubmit"
   >
     <NForm ref="formRef" :model="form" :rules="formRules" label-placement="top">
-      <NFormItem label="用户名" path="username">
+      <NFormItem :label="t('userList.labels.username')" path="username">
         <NInput
           v-model:value="form.username"
-          placeholder="请输入用户名"
+          :placeholder="t('userList.hints.enterUsername')"
           :disabled="isEdit"
           clearable
         />
       </NFormItem>
 
-      <NFormItem :label="isEdit ? '密码（留空不修改）' : '密码'" path="password">
+      <NFormItem :label="isEdit ? t('userList.labels.passwordOptional') : t('userList.labels.password')" path="password">
         <NInput
           v-model:value="form.password"
           type="password"
-          placeholder="请输入密码"
+          :placeholder="t('userList.hints.enterPassword')"
           show-password-on="click"
         />
       </NFormItem>
 
-      <NFormItem v-if="!isEdit" label="确认密码" path="confirmPassword">
+      <NFormItem v-if="!isEdit" :label="t('userList.labels.confirmPassword')" path="confirmPassword">
         <NInput
           v-model:value="form.confirmPassword"
           type="password"
-          placeholder="请再次输入密码"
+          :placeholder="t('userList.hints.reenterPassword')"
           show-password-on="click"
         />
       </NFormItem>
 
-      <NFormItem label="角色" path="role_id">
+      <NFormItem :label="t('userList.labels.role')" path="role_id">
         <NSelect
           v-model:value="form.role_id"
           :options="roleOptions"
-          placeholder="请选择角色"
+          :placeholder="t('userList.hints.selectRole')"
           clearable
         />
       </NFormItem>
 
-      <NFormItem label="状态" path="status">
+      <NFormItem :label="t('userList.labels.status')" path="status">
         <NSwitch
           v-model:value="form.status"
           :checked-value="true"
           :unchecked-value="false"
         />
         <span style="margin-left: var(--space-2); color: var(--sub); font-size: var(--fs-caption)">
-          {{ form.status ? '启用' : '禁用' }}
+          {{ form.status ? t('userList.status.on') : t('userList.status.off') }}
         </span>
       </NFormItem>
     </NForm>
@@ -558,18 +561,18 @@ onMounted(() => {
   <!-- 修改密码对话框 -->
   <ModalForm
     :show="showPwd"
-    :title="`修改密码 — ${pwdUsername}`"
+    :title="t('userList.pwdTitle', { username: pwdUsername })"
     :loading="pwdLoading"
     :width="480"
     @update:show="(v: boolean) => (showPwd = v)"
     @submit="handlePwdSubmit"
   >
     <NForm ref="pwdRef" :model="pwdForm" :rules="pwdRules" label-placement="top">
-      <NFormItem label="新密码" path="newPassword">
+      <NFormItem :label="t('userList.labels.newPassword')" path="newPassword">
         <NInput
           v-model:value="pwdForm.newPassword"
           type="password"
-          placeholder="请输入新密码"
+          :placeholder="t('userList.hints.enterNewPassword')"
           show-password-on="click"
         />
       </NFormItem>
@@ -585,15 +588,15 @@ onMounted(() => {
           />
         </div>
         <span class="pwd-strength__text" :style="{ color: passwordStrength.color }">
-          密码强度：{{ passwordStrength.text }}
+          {{ t('userList.strength.label', { level: passwordStrength.text }) }}
         </span>
       </div>
 
-      <NFormItem label="确认新密码" path="confirmPassword">
+      <NFormItem :label="t('userList.labels.confirmNewPassword')" path="confirmPassword">
         <NInput
           v-model:value="pwdForm.confirmPassword"
           type="password"
-          placeholder="请再次输入新密码"
+          :placeholder="t('userList.hints.reenterNewPassword')"
           show-password-on="click"
         />
       </NFormItem>
@@ -603,9 +606,9 @@ onMounted(() => {
   <!-- 删除确认 -->
   <ConfirmDialog
     :show="showDelete"
-    title="删除用户"
-    :content="`确定要删除用户「${deleteName}」吗？此操作不可撤销。`"
-    confirm-text="删除"
+    :title="t('userList.delete.title')"
+    :content="t('userList.delete.content', { name: deleteName })"
+    :confirm-text="t('userList.actions.delete')"
     type="error"
     :loading="deleteLoading"
     @update:show="(v: boolean) => (showDelete = v)"

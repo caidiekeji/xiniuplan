@@ -1,15 +1,13 @@
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, h } from 'vue'
-import {
-  NButton, NIcon, NForm, NFormItem, NInput, NSteps, NStep,
-  NSpace, NAlert, NModal, NCard, useMessage, NTag
-} from 'naive-ui'
+import { ref, computed, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { NButton, NIcon, NForm, NFormItem, NInput, NSteps, NStep, NSpace, NAlert } from 'naive-ui'
+import { useMessage } from '@/composables/useMessage'
 import {
   ShieldCheckmarkOutline, QrCodeOutline, CopyOutline,
   CheckmarkCircleOutline, WarningOutline
 } from '@vicons/ionicons5'
-import { PageCard, StatusTag, ConfirmDialog } from '@/components'
-import type { StatusType } from '@/components'
+import { PageCard, StatusTag, ContentModal } from '@/components'
 import {
   getTOTPStatus, bindTOTP, verifyTOTP, disableTOTP,
   type TOTPStatus
@@ -17,6 +15,7 @@ import {
 import QRCode from 'qrcode'
 
 const message = useMessage()
+const { t } = useI18n()
 
 /* ========== 状态 ========== */
 const loading = ref(false)
@@ -30,7 +29,7 @@ async function loadStatus() {
       totpStatus.value = res.data
     }
   } catch (err: any) {
-    message.error(err.message || '获取 TOTP 状态失败')
+    message.error(err.message || t('totp.loadStatusError'))
   } finally {
     loading.value = false
   }
@@ -47,19 +46,19 @@ const verifyCode = ref('')
 const verifyFormRef = ref()
 const recoveryCodes = ref<string[]>([])
 
-const verifyRules = {
+const verifyRules = computed(() => ({
   code: {
     required: true,
-    message: '请输入 6 位动态码',
+    message: t('totp.validate.codeRequired'),
     trigger: 'blur',
     validator: (_rule: any, value: string) => {
       if (!/^\d{6}$/.test(value)) {
-        return new Error('请输入 6 位数字')
+        return new Error(t('totp.validate.enterDigits'))
       }
       return true
     }
   }
-}
+}))
 
 async function startBind() {
   bindStep.value = 0
@@ -87,7 +86,7 @@ async function startBind() {
       })
     }
   } catch (err: any) {
-    message.error(err.message || '获取绑定信息失败')
+    message.error(err.message || t('totp.getBindInfoError'))
     showBind.value = false
   } finally {
     bindLoading.value = false
@@ -96,18 +95,18 @@ async function startBind() {
 
 function copySecret() {
   navigator.clipboard.writeText(bindSecret.value).then(() => {
-    message.success('密钥已复制')
+    message.success(t('totp.secretCopied'))
   }).catch(() => {
-    message.error('复制失败，请手动复制')
+    message.error(t('totp.copyFailed'))
   })
 }
 
 function copyRecoveryCodes() {
   const text = recoveryCodes.value.join('\n')
   navigator.clipboard.writeText(text).then(() => {
-    message.success('恢复码已复制')
+    message.success(t('totp.recoveryCopied'))
   }).catch(() => {
-    message.error('复制失败，请手动复制')
+    message.error(t('totp.copyFailed'))
   })
 }
 
@@ -124,10 +123,10 @@ async function handleVerify() {
     if (res.data) {
       recoveryCodes.value = res.data.recovery_codes || []
       bindStep.value = 1
-      message.success('TOTP 绑定成功')
+      message.success(t('totp.bindSuccessMsg'))
     }
   } catch (err: any) {
-    message.error(err.message || '验证失败，请检查动态码')
+    message.error(err.message || t('totp.verifyFailed'))
   } finally {
     bindLoading.value = false
   }
@@ -144,19 +143,19 @@ const disableLoading = ref(false)
 const disableFormRef = ref()
 const disableCode = ref('')
 
-const disableRules = {
+const disableRules = computed(() => ({
   code: {
     required: true,
-    message: '请输入 6 位动态码',
+    message: t('totp.validate.codeRequired'),
     trigger: 'blur',
     validator: (_rule: any, value: string) => {
       if (!/^\d{6}$/.test(value)) {
-        return new Error('请输入 6 位数字')
+        return new Error(t('totp.validate.enterDigits'))
       }
       return true
     }
   }
-}
+}))
 
 function openDisable() {
   disableCode.value = ''
@@ -173,11 +172,11 @@ async function handleDisableConfirm() {
   disableLoading.value = true
   try {
     await disableTOTP({ code: disableCode.value })
-    message.success('TOTP 已禁用')
+    message.success(t('totp.disableSuccessMsg'))
     showDisable.value = false
     loadStatus()
   } catch (err: any) {
-    message.error(err.message || '禁用失败，请检查动态码')
+    message.error(err.message || t('totp.disableFailed'))
   } finally {
     disableLoading.value = false
   }
@@ -189,7 +188,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <PageCard title="二次验证 (TOTP)" subtitle="基于时间的一次性密码，为账户提供额外安全保护">
+  <PageCard :title="t('totp.title')" :subtitle="t('totp.subtitle')">
     <div class="totp-container">
       <!-- 当前状态卡片 -->
       <div class="totp-status-card">
@@ -198,18 +197,18 @@ onMounted(() => {
         </div>
         <div class="totp-status-card__info">
           <div class="totp-status-card__row">
-            <span class="totp-status-card__label">当前状态：</span>
+            <span class="totp-status-card__label">{{ t('totp.statusLabel') }}</span>
             <StatusTag
               :status="totpStatus?.enabled ? 'running' : 'stopped'"
-              :text="totpStatus?.enabled ? '已启用' : '未启用'"
+              :text="totpStatus?.enabled ? t('totp.status.enabled') : t('totp.status.disabled')"
             />
           </div>
           <p v-if="totpStatus?.enabled && totpStatus?.bound_at" class="totp-status-card__time">
-            绑定时间：<span class="mono">{{ totpStatus.bound_at }}</span>
+            {{ t('totp.boundAt') }} <span class="mono">{{ totpStatus.bound_at }}</span>
           </p>
           <p class="totp-status-card__desc">
-            TOTP（基于时间的一次性密码）兼容 Google Authenticator、Microsoft Authenticator、Authy 等验证器应用。
-            启用后，登录时除密码外还需输入验证器生成的 6 位动态码。
+            {{ t('totp.compatDesc') }}
+            {{ t('totp.loginDesc') }}
           </p>
         </div>
         <div class="totp-status-card__action">
@@ -222,7 +221,7 @@ onMounted(() => {
             <template #icon>
               <NIcon><QrCodeOutline /></NIcon>
             </template>
-            立即绑定
+            {{ t('totp.bindNow') }}
           </NButton>
           <NButton
             v-else
@@ -233,32 +232,31 @@ onMounted(() => {
             <template #icon>
               <NIcon><WarningOutline /></NIcon>
             </template>
-            禁用 TOTP
+            {{ t('totp.disableBtn') }}
           </NButton>
         </div>
       </div>
 
       <!-- 恢复码说明 -->
       <NAlert type="warning" :show-icon="true" class="totp-notice">
-        <template #header>恢复码说明</template>
-        每个恢复码只能使用一次，用于在无法使用验证器时登录账户。请妥善保存恢复码，丢失后无法找回。
-        如需重新获取恢复码，请先禁用 TOTP 再重新绑定。
+        <template #header>{{ t('totp.recoveryNotice.title') }}</template>
+        {{ t('totp.recoveryNotice.line1') }}
+        {{ t('totp.recoveryNotice.line2') }}
       </NAlert>
     </div>
   </PageCard>
 
   <!-- 绑定流程对话框 -->
-  <NModal
+  <ContentModal
     :show="showBind"
     :mask-closable="false"
-    preset="card"
-    title="绑定 TOTP 二次验证"
-    :style="{ width: 'min(560px, 92vw)' }"
+    :title="t('totp.bindModal.title')"
+    size="md"
     @update:show="(v: boolean) => (showBind = v)"
   >
     <NSteps :current="bindStep" class="totp-steps">
-      <NStep title="扫描二维码" description="使用验证器 App 扫描" />
-      <NStep title="验证并保存恢复码" description="输入动态码完成绑定" />
+      <NStep :title="t('totp.bindModal.steps.scan.title')" :description="t('totp.bindModal.steps.scan.desc')" />
+      <NStep :title="t('totp.bindModal.steps.verify.title')" :description="t('totp.bindModal.steps.verify.desc')" />
     </NSteps>
 
     <!-- 步骤1：二维码 -->
@@ -266,31 +264,31 @@ onMounted(() => {
       <NSpin :show="bindLoading">
         <div class="totp-qr-section">
           <div class="totp-qr">
-            <img v-if="qrCodeDataUrl" :src="qrCodeDataUrl" alt="TOTP 二维码" />
+            <img v-if="qrCodeDataUrl" :src="qrCodeDataUrl" :alt="t('totp.bindModal.qrAlt')" />
             <div v-else class="totp-qr__placeholder">
               <NIcon :size="48"><QrCodeOutline /></NIcon>
             </div>
           </div>
           <div class="totp-qr-info">
-            <p class="totp-qr-info__tip">使用验证器 App 扫描左侧二维码</p>
-            <p class="totp-qr-info__sub">如无法扫描，可手动输入以下密钥：</p>
+            <p class="totp-qr-info__tip">{{ t('totp.bindModal.qrTip') }}</p>
+            <p class="totp-qr-info__sub">{{ t('totp.bindModal.qrManual') }}</p>
             <div class="totp-secret">
               <code class="mono">{{ bindSecret }}</code>
               <NButton size="tiny" quaternary @click="copySecret">
                 <template #icon>
                   <NIcon><CopyOutline /></NIcon>
                 </template>
-                复制
+                {{ t('totp.bindModal.copy') }}
               </NButton>
             </div>
           </div>
         </div>
 
         <NForm ref="verifyFormRef" :model="{ code: verifyCode }" :rules="verifyRules" label-placement="top">
-          <NFormItem label="输入验证器显示的 6 位动态码" path="code">
+          <NFormItem :label="t('totp.bindModal.codeLabel')" path="code">
             <NInput
               v-model:value="verifyCode"
-              placeholder="请输入 6 位数字"
+              :placeholder="t('totp.validate.enterDigits')"
               maxlength="6"
               class="totp-code-input"
             />
@@ -298,9 +296,9 @@ onMounted(() => {
         </NForm>
 
         <div class="totp-step__actions">
-          <NButton @click="showBind = false">取消</NButton>
+          <NButton @click="showBind = false">{{ t('totp.cancel') }}</NButton>
           <NButton type="primary" :loading="bindLoading" @click="handleVerify">
-            验证并绑定
+            {{ t('totp.bindModal.confirm') }}
           </NButton>
         </div>
       </NSpin>
@@ -309,18 +307,18 @@ onMounted(() => {
     <!-- 步骤2：恢复码 -->
     <div v-else class="totp-step">
       <NAlert type="success" :show-icon="true" class="totp-success">
-        <template #header>绑定成功</template>
-        TOTP 二次验证已启用。请妥善保存以下恢复码，每个恢复码只能使用一次。
+        <template #header>{{ t('totp.success.title') }}</template>
+        {{ t('totp.success.body') }}
       </NAlert>
 
       <div class="totp-recovery">
         <div class="totp-recovery__header">
-          <span class="totp-recovery__title">恢复码（共 {{ recoveryCodes.length }} 个）</span>
+          <span class="totp-recovery__title">{{ t('totp.recoveryCount', { count: recoveryCodes.length }) }}</span>
           <NButton size="tiny" quaternary @click="copyRecoveryCodes">
             <template #icon>
               <NIcon><CopyOutline /></NIcon>
             </template>
-            全部复制
+            {{ t('totp.copyAll') }}
           </NButton>
         </div>
         <div class="totp-recovery__list">
@@ -339,30 +337,29 @@ onMounted(() => {
           <template #icon>
             <NIcon><CheckmarkCircleOutline /></NIcon>
           </template>
-          我已保存恢复码
+          {{ t('totp.savedRecovery') }}
         </NButton>
       </div>
     </div>
-  </NModal>
+  </ContentModal>
 
   <!-- 禁用确认对话框 -->
-  <NModal
+  <ContentModal
     :show="showDisable"
     :mask-closable="false"
-    preset="card"
-    title="禁用 TOTP 二次验证"
-    :style="{ width: 'min(440px, 92vw)' }"
+    :title="t('totp.disableModal.title')"
+    size="sm"
     @update:show="(v: boolean) => (showDisable = v)"
   >
     <NAlert type="warning" :show-icon="true" class="totp-disable-alert">
-      禁用后，登录将不再需要二次验证。请输入当前 6 位动态码以确认操作。
+      {{ t('totp.disableModal.desc') }}
     </NAlert>
 
     <NForm ref="disableFormRef" :model="{ code: disableCode }" :rules="disableRules" label-placement="top">
-      <NFormItem label="6 位动态码" path="code">
+      <NFormItem :label="t('totp.disableModal.codeLabel')" path="code">
         <NInput
           v-model:value="disableCode"
-          placeholder="请输入验证器显示的 6 位数字"
+          :placeholder="t('totp.disableModal.codePlaceholder')"
           maxlength="6"
         />
       </NFormItem>
@@ -370,13 +367,13 @@ onMounted(() => {
 
     <template #footer>
       <NSpace justify="end">
-        <NButton @click="showDisable = false">取消</NButton>
+        <NButton @click="showDisable = false">{{ t('totp.cancel') }}</NButton>
         <NButton type="error" :loading="disableLoading" @click="handleDisableConfirm">
-          确认禁用
+          {{ t('totp.disableModal.confirm') }}
         </NButton>
       </NSpace>
     </template>
-  </NModal>
+  </ContentModal>
 </template>
 
 <style scoped>
@@ -427,7 +424,7 @@ onMounted(() => {
 
 .totp-status-card__time {
   font-size: var(--fs-caption);
-  color: var(--faint);
+  color: var(--text-quaternary);
   margin-bottom: var(--space-2);
 }
 
@@ -483,7 +480,7 @@ onMounted(() => {
 }
 
 .totp-qr__placeholder {
-  color: var(--faint);
+  color: var(--text-quaternary);
 }
 
 .totp-qr-info {

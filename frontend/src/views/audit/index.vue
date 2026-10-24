@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, h } from 'vue'
-import { NTabs, NTabPane, NButton, NIcon, NInput, NSelect, NDatePicker, useMessage } from 'naive-ui'
+import { ref, onMounted, computed, watch, h } from 'vue'
+import { NTabs, NTabPane, NButton, NIcon, NInput, NSelect, NDatePicker, NTag } from 'naive-ui'
+import { useMessage } from '@/composables/useMessage'
 import { DownloadOutline } from '@vicons/ionicons5'
 import { PageCard, DataTable, SearchForm, StatusTag } from '@/components'
+import { listAnomalies, type AnomalyEvent } from '@/api/newfeatures'
 import type { DataTableColumns } from 'naive-ui'
 import {
   getAuditLogs,
@@ -11,15 +13,23 @@ import {
   type AuditLog,
   type LoginLog
 } from '@/api/audit'
+import { useI18n } from 'vue-i18n'
+import { useQueryState } from '@/composables/useQueryState'
+import { formatDate } from '@/utils/format'
 
 const message = useMessage()
+const { t } = useI18n()
+
+/* ==================== URL 状态（D19：Tab/分页/筛选刷新可还原） ==================== */
+
+const activeTab = useQueryState('tab', 'operations')
 
 /* ==================== Tab 1: 操作日志 ==================== */
 
 const auditLoading = ref(false)
 const auditLogs = ref<AuditLog[]>([])
 const auditTotal = ref(0)
-const auditPage = ref(1)
+const auditPage = useQueryState('page', 1)
 const auditPageSize = ref(20)
 
 const searchForm = ref({
@@ -29,36 +39,47 @@ const searchForm = ref({
   time_range: null as [number, number] | null
 })
 
-const resultOptions = [
-  { label: '全部', value: '' },
-  { label: '成功', value: 'success' },
-  { label: '失败', value: 'failed' }
-]
+// 筛选条件 URL 化：初始化从 query 恢复，变化时写回（time_range 为复杂对象，不入 URL）
+const qUser = useQueryState('user', '')
+const qAction = useQueryState('action', '')
+const qResult = useQueryState('result', '')
+searchForm.value.user_id = qUser.value
+searchForm.value.action = qAction.value
+searchForm.value.result = (qResult.value || null) as 'success' | 'failed' | null
+watch(() => searchForm.value.user_id, (v) => (qUser.value = v || ''))
+watch(() => searchForm.value.action, (v) => (qAction.value = v || ''))
+watch(() => searchForm.value.result, (v) => (qResult.value = v || ''))
 
-const actionOptions = [
-  { label: '全部操作', value: '' },
-  { label: '登录', value: 'login' },
-  { label: '创建站点', value: 'create_site' },
-  { label: '删除站点', value: 'delete_site' },
-  { label: '创建数据库', value: 'create_database' },
-  { label: '安装应用', value: 'install_app' },
-  { label: '重启服务', value: 'restart_service' },
-  { label: '文件操作', value: 'file_operation' },
-  { label: '系统设置', value: 'system_settings' },
-  { label: '防火墙规则', value: 'firewall_rule' }
-]
+const resultOptions = computed(() => [
+  { label: t('audit.resultOptions.all'), value: '' },
+  { label: t('audit.resultOptions.success'), value: 'success' },
+  { label: t('audit.resultOptions.failed'), value: 'failed' }
+])
+
+const actionOptions = computed(() => [
+  { label: t('audit.actionOptions.all'), value: '' },
+  { label: t('audit.actionOptions.login'), value: 'login' },
+  { label: t('audit.actionOptions.createSite'), value: 'create_site' },
+  { label: t('audit.actionOptions.deleteSite'), value: 'delete_site' },
+  { label: t('audit.actionOptions.createDatabase'), value: 'create_database' },
+  { label: t('audit.actionOptions.installApp'), value: 'install_app' },
+  { label: t('audit.actionOptions.restartService'), value: 'restart_service' },
+  { label: t('audit.actionOptions.fileOperation'), value: 'file_operation' },
+  { label: t('audit.actionOptions.systemSettings'), value: 'system_settings' },
+  { label: t('audit.actionOptions.firewallRule'), value: 'firewall_rule' }
+])
 
 const auditColumns = computed(() => [
   {
-    title: '时间', key: 'created_at', width: 170,
+    title: t('audit.columns.time'), key: 'created_at', width: 170,
     render: (row: any) => h('span', { class: 'mono' }, row.created_at)
   },
-  { title: '操作人', key: 'username', width: 110 },
+  { title: t('audit.columns.operator'), key: 'username', width: 110 },
   {
-    title: '操作类型', key: 'action', width: 130,
+    title: t('audit.columns.actionType'), key: 'action', width: 130,
     render: (row: any) => h('span', { class: 'audit__action' }, row.action)
   },
-  { title: '资源', key: 'resource', width: 160, ellipsis: { tooltip: true } },
+  { title: t('audit.columns.resource'), key: 'resource', width: 160, ellipsis: { tooltip: true } },
   {
     title: 'IP', key: 'ip', width: 130,
     render: (row: any) => h('span', { class: 'mono' }, row.ip)
@@ -68,11 +89,11 @@ const auditColumns = computed(() => [
     render: (row: any) => h('span', { class: 'audit__ua' }, row.user_agent)
   },
   {
-    title: '结果', key: 'result', width: 90,
+    title: t('audit.columns.result'), key: 'result', width: 90,
     render: (row: any) =>
       h(StatusTag, {
         status: row.result === 'success' ? 'running' : 'error',
-        text: row.result === 'success' ? '成功' : '失败'
+        text: row.result === 'success' ? t('audit.resultOptions.success') : t('audit.resultOptions.failed')
       })
   }
 ] as DataTableColumns)
@@ -96,38 +117,16 @@ async function loadAuditLogs() {
       auditLogs.value = res.data.items
       auditTotal.value = res.data.total
     } else {
-      generateMockAuditLogs()
+      auditLogs.value = []
+      auditTotal.value = 0
     }
-  } catch {
-    generateMockAuditLogs()
+  } catch (e: any) {
+    auditLogs.value = []
+    auditTotal.value = 0
+    message.error(e.message || t('audit.messages.loadAuditFailed'))
   } finally {
     auditLoading.value = false
   }
-}
-
-function generateMockAuditLogs() {
-  const actions = ['登录', '创建站点', '删除站点', '创建数据库', '安装应用', '重启服务', '文件上传', '系统设置', '防火墙规则', 'SSL证书']
-  const resources = ['example.com', 'MySQL 8.0', 'Nginx', '/var/www/html', 'Redis', '端口 8080', 'cert.pem', 'PHP 8.1', 'Docker', '备份任务']
-  const users = ['admin', 'operator', 'deploy', 'system']
-  const uas = [
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15',
-    'curl/7.81.0',
-    'Mozilla/5.0 (X11; Linux x86_64) Gecko/20100101 Firefox/115.0'
-  ]
-  const now = Date.now()
-  auditLogs.value = Array.from({ length: auditPageSize.value }, (_, i) => ({
-    id: i + 1,
-    user_id: 1,
-    username: users[i % users.length],
-    action: actions[i % actions.length],
-    resource: resources[i % resources.length],
-    ip: `192.168.1.${100 + (i % 50)}`,
-    user_agent: uas[i % uas.length],
-    result: i % 7 === 0 ? 'failed' : 'success',
-    created_at: new Date(now - i * 3600000 * 2).toLocaleString('zh-CN', { hour12: false })
-  }))
-  auditTotal.value = 156
 }
 
 function handleSearch(values: Record<string, any>) {
@@ -148,16 +147,16 @@ function handleReset() {
 const loginLoading = ref(false)
 const loginLogs = ref<LoginLog[]>([])
 const loginTotal = ref(0)
-const loginPage = ref(1)
+const loginPage = useQueryState('loginPage', 1)
 const loginPageSize = ref(20)
 const exportLoading = ref(false)
 
 const loginColumns = computed(() => [
   {
-    title: '时间', key: 'created_at', width: 170,
+    title: t('audit.columns.time'), key: 'created_at', width: 170,
     render: (row: any) => h('span', { class: 'mono' }, row.created_at)
   },
-  { title: '用户名', key: 'username', width: 130 },
+  { title: t('audit.columns.username'), key: 'username', width: 130 },
   {
     title: 'IP', key: 'ip', width: 140,
     render: (row: any) => h('span', { class: 'mono' }, row.ip)
@@ -167,11 +166,11 @@ const loginColumns = computed(() => [
     render: (row: any) => h('span', { class: 'audit__ua' }, row.user_agent)
   },
   {
-    title: '结果', key: 'result', width: 90,
+    title: t('audit.columns.result'), key: 'result', width: 90,
     render: (row: any) =>
       h(StatusTag, {
         status: row.result === 'success' ? 'running' : 'error',
-        text: row.result === 'success' ? '成功' : '失败'
+        text: row.result === 'success' ? t('audit.resultOptions.success') : t('audit.resultOptions.failed')
       })
   }
 ] as DataTableColumns)
@@ -184,33 +183,16 @@ async function loadLoginLogs() {
       loginLogs.value = res.data.items
       loginTotal.value = res.data.total
     } else {
-      generateMockLoginLogs()
+      loginLogs.value = []
+      loginTotal.value = 0
     }
-  } catch {
-    generateMockLoginLogs()
+  } catch (e: any) {
+    loginLogs.value = []
+    loginTotal.value = 0
+    message.error(e.message || t('audit.messages.loadLoginFailed'))
   } finally {
     loginLoading.value = false
   }
-}
-
-function generateMockLoginLogs() {
-  const users = ['admin', 'operator', 'deploy', 'root', 'guest']
-  const uas = [
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15',
-    'Mozilla/5.0 (X11; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/115.0',
-    'PostmanRuntime/7.36.0'
-  ]
-  const now = Date.now()
-  loginLogs.value = Array.from({ length: loginPageSize.value }, (_, i) => ({
-    id: i + 1,
-    username: users[i % users.length],
-    ip: i % 5 === 0 ? `45.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}` : `192.168.1.${100 + (i % 30)}`,
-    user_agent: uas[i % uas.length],
-    result: i % 6 === 0 ? 'failed' : 'success',
-    created_at: new Date(now - i * 1800000).toLocaleString('zh-CN', { hour12: false })
-  }))
-  loginTotal.value = 89
 }
 
 async function handleExport() {
@@ -220,9 +202,9 @@ async function handleExport() {
     if (res.data?.download_url) {
       window.open(res.data.download_url, '_blank')
     }
-    message.success('日志导出成功')
+    message.success(t('audit.messages.exportSuccess'))
   } catch {
-    message.success('日志导出任务已创建（mock）')
+    message.success(t('audit.messages.exportMock'))
   } finally {
     exportLoading.value = false
   }
@@ -234,30 +216,69 @@ onMounted(() => {
   loadAuditLogs()
   loadLoginLogs()
 })
+
+/* ========== 异常登录检测（S-012） ========== */
+const NTagComp = NTag
+const anomalies = ref<AnomalyEvent[]>([])
+const anomalyLoading = ref(false)
+
+async function loadAnomalies() {
+  anomalyLoading.value = true
+  try {
+    const res = await listAnomalies()
+    anomalies.value = res.items || []
+  } catch (e: any) {
+    message.error(e.message || t('audit.messages.detectFailed'))
+  } finally {
+    anomalyLoading.value = false
+  }
+}
+
+const anomalyTypeMap = computed<Record<string, { label: string; type: 'error' | 'warning' | 'info' }>>(() => ({
+  brute_force_ip: { label: t('audit.anomalyTypes.bruteForceIp'), type: 'error' },
+  brute_force_user: { label: t('audit.anomalyTypes.bruteForceUser'), type: 'error' },
+  new_ip_login: { label: t('audit.anomalyTypes.newIpLogin'), type: 'info' }
+}))
+
+const anomalyColumns = computed<DataTableColumns>(() => [
+  {
+    title: t('audit.columns.type'), key: 'type', width: 120,
+    render: (row: any) => {
+      const cfg = anomalyTypeMap.value[row.type] || { label: row.type, type: 'info' as const }
+      return h(NTagComp, { size: 'small', type: cfg.type }, { default: () => cfg.label })
+    }
+  },
+  { title: t('audit.columns.subject'), key: 'subject', width: 160 },
+  { title: t('audit.columns.count'), key: 'count', width: 80 },
+  { title: t('audit.columns.lastSeen'), key: 'last_seen', width: 180, render: (r: any) => formatDate(r.last_seen) },
+  { title: t('audit.columns.detail'), key: 'detail', ellipsis: { tooltip: true } }
+])
+
+onMounted(loadAnomalies)
 </script>
 
 <template>
   <div class="audit-page">
-    <NTabs type="line" animated>
+    <NTabs v-model:value="activeTab" type="line" animated>
       <!-- Tab 1: 操作日志 -->
-      <NTabPane name="operations" tab="操作日志">
-        <PageCard title="操作日志" subtitle="所有面板操作的完整审计记录">
+      <NTabPane name="operations" :tab="t('audit.tabs.operations')">
+        <PageCard :title="t('audit.audit.title')" :subtitle="t('audit.audit.subtitle')">
           <SearchForm @search="handleSearch" @reset="handleReset">
             <div class="audit__search-row">
               <div class="audit__search-item">
-                <label class="audit__search-label">用户ID</label>
-                <NInput v-model:value="searchForm.user_id" name="user_id" placeholder="用户ID" size="small" style="width: 120px" />
+                <label class="audit__search-label">{{ t('audit.audit.userId') }}</label>
+                <NInput v-model:value="searchForm.user_id" name="user_id" :placeholder="t('audit.audit.userIdPlaceholder')" size="small" style="width: 120px" />
               </div>
               <div class="audit__search-item">
-                <label class="audit__search-label">操作类型</label>
+                <label class="audit__search-label">{{ t('audit.audit.actionType') }}</label>
                 <NSelect v-model:value="searchForm.action" name="action" :options="actionOptions" size="small" style="width: 150px" />
               </div>
               <div class="audit__search-item">
-                <label class="audit__search-label">结果</label>
+                <label class="audit__search-label">{{ t('audit.audit.result') }}</label>
                 <NSelect v-model:value="searchForm.result" name="result" :options="resultOptions as any" size="small" style="width: 110px" />
               </div>
               <div class="audit__search-item">
-                <label class="audit__search-label">时间范围</label>
+                <label class="audit__search-label">{{ t('audit.audit.timeRange') }}</label>
                 <NDatePicker
                   v-model:value="searchForm.time_range"
                   type="datetimerange"
@@ -284,15 +305,32 @@ onMounted(() => {
         </PageCard>
       </NTabPane>
 
+      <!-- Tab: 异常检测 -->
+      <NTabPane name="anomalies" :tab="t('audit.tabs.anomalies')">
+        <PageCard :title="t('audit.anomalies.title')" :subtitle="t('audit.anomalies.subtitle')">
+          <template #extra>
+            <NButton size="small" quaternary :loading="anomalyLoading" @click="loadAnomalies">
+              {{ t('audit.anomalies.refresh') }}
+            </NButton>
+          </template>
+          <DataTable
+            :columns="anomalyColumns"
+            :data="anomalies"
+            :loading="anomalyLoading"
+            :row-key="(row: any) => row.type + row.subject"
+          />
+        </PageCard>
+      </NTabPane>
+
       <!-- Tab 2: 登录日志 -->
-      <NTabPane name="logins" tab="登录日志">
-        <PageCard title="登录日志" subtitle="面板登录记录与异常登录追踪">
+      <NTabPane name="logins" :tab="t('audit.tabs.logins')">
+        <PageCard :title="t('audit.logins.title')" :subtitle="t('audit.logins.subtitle')">
           <template #extra>
             <NButton type="primary" size="small" :loading="exportLoading" @click="handleExport">
               <template #icon>
                 <NIcon><DownloadOutline /></NIcon>
               </template>
-              导出 CSV
+              {{ t('audit.logins.exportCsv') }}
             </NButton>
           </template>
 
@@ -319,7 +357,7 @@ onMounted(() => {
 .audit-page {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--space-6);
 }
 
 .audit__search-row {
@@ -348,7 +386,7 @@ onMounted(() => {
 
 .audit__ua {
   font-size: var(--fs-caption);
-  color: var(--faint);
+  color: var(--text-quaternary);
   font-family: var(--font-mono);
 }
 </style>

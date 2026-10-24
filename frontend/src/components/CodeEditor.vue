@@ -5,6 +5,7 @@ import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
 // Monarch 语法高亮内置，nginx/yaml/shell 等高亮不受影响。
 import * as monaco from 'monaco-editor/esm/vs/editor/editor.api'
 import EditorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker'
+import { fsPx } from '@/composables/useThemeTokens'
 
 // 仅注册基础 worker（取消令牌/word-based 建议所需），语言级智能提示按需再加
 self.MonacoEnvironment = {
@@ -47,7 +48,8 @@ onMounted(() => {
     theme: props.theme,
     readOnly: props.readOnly,
     minimap: { enabled: props.minimap },
-    fontSize: 13,
+    // 代码字号走 --fs-body（14px），与正文同档；caption 12px 对代码过小
+    fontSize: fsPx('--fs-body', 13),
     lineNumbers: 'on',
     scrollBeyondLastLine: false,
     automaticLayout: true,

@@ -15,6 +15,8 @@ export default {
   downloadUpload: '下载 / 上传',
   resourceTrend: '资源趋势',
   resourceTrendSubtitle: 'CPU 与内存使用率实时监控',
+  chartAria: '资源趋势图：当前 CPU {cpu}%，内存 {mem}%（范围 {range}）',
+  chartAriaEmpty: '资源趋势图：暂无数据',
   cpuMemoryUsage: 'CPU 与内存使用率',
   recentOperations: '最近操作',
   recentOperationsSubtitle: '最新 5 条审计记录',

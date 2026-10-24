@@ -117,6 +117,16 @@ func (s *Service) runTask(task *model.CronTask) {
 		output, execErr = s.execURL(task.Target)
 	case "app_restart":
 		output, execErr = s.execAppRestart(task.Target)
+	case "docker_cleanup":
+		output, execErr = s.execDockerCleanup()
+	case "virus_scan":
+		output, execErr = s.execVirusScan(task.Target)
+	case "ssl_check":
+		output, execErr = s.execSSLCheck()
+	case "tamper_check":
+		output, execErr = s.execTamperCheck()
+	case "recycle_cleanup":
+		output, execErr = s.execRecycleCleanup()
 	default:
 		execErr = fmt.Errorf("unknown task type: %s", task.Type)
 	}
@@ -536,4 +546,48 @@ func ToLogResponse(log *model.CronLog, taskName string) dto.CronLogResponse {
 	}
 
 	return resp
+}
+
+// execDockerCleanup Docker 定时清理（roadmap #3）：清理停止容器/悬空镜像/构建缓存
+// 注意：不清理 volumes（数据安全）
+func (s *Service) execDockerCleanup() (string, error) {
+	var out string
+	steps := [][]string{
+		{"docker", "container", "prune", "-f"},
+		{"docker", "image", "prune", "-af"},
+		{"docker", "builder", "prune", "-af"},
+	}
+	for _, args := range steps {
+		cmd := exec.Command(args[0], args[1:]...)
+		b, err := cmd.CombinedOutput()
+		out += fmt.Sprintf("$ %s\n%s\n", strings.Join(args, " "), string(b))
+		if err != nil {
+			return out, err
+		}
+	}
+	return out, nil
+}
+
+// execVirusScan 病毒扫描（roadmap #16）：ClamAV 扫描目标路径，输出感染文件清单
+func (s *Service) execVirusScan(target string) (string, error) {
+	if target == "" {
+		target = "/www"
+	}
+	if strings.Contains(target, "..") || strings.Contains(target, ";") || strings.Contains(target, "&") {
+		return "", fmt.Errorf("扫描路径包含非法字符")
+	}
+	cmd := exec.Command("clamscan", "-r", "--infected", "--suppress-ok-results", target)
+	b, err := cmd.CombinedOutput()
+	out := string(b)
+	if err != nil {
+		if strings.Contains(out, "command not found") || strings.Contains(out, "executable file not found") {
+			return "", fmt.Errorf("未安装 ClamAV，请先执行: apt install -y clamav")
+		}
+		// clamscan 发现感染文件时退出码为 1，属正常结果
+		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
+			return "发现感染文件:\n" + out, nil
+		}
+		return out, err
+	}
+	return "扫描完成，未发现感染文件。\n" + out, nil
 }

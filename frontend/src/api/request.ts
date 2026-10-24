@@ -1,6 +1,7 @@
 import axios, { type AxiosInstance, type AxiosRequestConfig, type AxiosResponse, type InternalAxiosRequestConfig } from 'axios'
 import { useAuthStore } from '@/stores/auth'
 import router from '@/router'
+import i18n from '@/locales'
 
 export interface ApiResponse<T = any> {
   code: number
@@ -55,7 +56,7 @@ service.interceptors.response.use(
           router.push('/change-password')
         }
       }
-      return Promise.reject(new Error(res.message || '请求失败'))
+      return Promise.reject(new Error(res.message || i18n.global.t('common.errors.requestFailed')))
     }
     return res as unknown as AxiosResponse
   },
@@ -73,7 +74,7 @@ service.interceptors.response.use(
         router.push('/change-password')
       }
     }
-    const message = error.response?.data?.message || error.message || '网络错误'
+    const message = error.response?.data?.message || error.message || i18n.global.t('common.errors.networkError')
     return Promise.reject(new Error(message))
   }
 )

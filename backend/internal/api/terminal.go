@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"cloudpivot/internal/common"
 	"cloudpivot/internal/dto"
 	"cloudpivot/internal/middleware"
 	"cloudpivot/internal/model"
@@ -47,15 +48,60 @@ func init() {
 	terminalManager.StartCleanupLoop(5*time.Minute, 30*time.Minute)
 }
 
-// RegisterTerminalWSRoutes 注册终端 WebSocket 路由
+// RegisterTerminalWSRoutes 注册终端 WebSocket 路由与增强功能接口
 func RegisterTerminalWSRoutes(r *gin.RouterGroup) {
 	r.GET("/ws/terminal", middleware.RequirePermission(model.PermTerminalView), handleTerminalWS)
+
+	// 快捷命令面板（T-004）
+	r.GET("/terminal/quick-commands", middleware.RequirePermission(model.PermTerminalView), h_ListQuickCommands)
+
+	// 会话录制（T-006）
+	r.GET("/terminal/records", middleware.RequirePermission(model.PermTerminalView), h_ListTerminalRecords)
+	r.GET("/terminal/records/:name", middleware.RequirePermission(model.PermTerminalView), h_GetTerminalRecord)
+	r.DELETE("/terminal/records/:name", middleware.RequirePermission(model.PermTerminalCreate), h_DeleteTerminalRecord)
+}
+
+// h_ListQuickCommands GET /terminal/quick-commands
+func h_ListQuickCommands(c *gin.Context) {
+	common.Success(c, termsvc.QuickCommands)
+}
+
+// h_ListTerminalRecords GET /terminal/records
+func h_ListTerminalRecords(c *gin.Context) {
+	records, err := termsvc.ListRecords()
+	if err != nil {
+		common.Fail(c, common.CodeServerError, err.Error())
+		return
+	}
+	common.Success(c, records)
+}
+
+// h_GetTerminalRecord GET /terminal/records/:name - 回放录制内容
+func h_GetTerminalRecord(c *gin.Context) {
+	content, err := termsvc.ReadRecord(c.Param("name"))
+	if err != nil {
+		common.Fail(c, common.CodeNotFound, err.Error())
+		return
+	}
+	common.Success(c, gin.H{"name": c.Param("name"), "content": content})
+}
+
+// h_DeleteTerminalRecord DELETE /terminal/records/:name
+func h_DeleteTerminalRecord(c *gin.Context) {
+	if err := termsvc.DeleteRecord(c.Param("name")); err != nil {
+		common.Fail(c, common.CodeServerError, err.Error())
+		return
+	}
+	common.Success(c, gin.H{"deleted": true})
 }
 
 func handleTerminalWS(c *gin.Context) {
 	sessionID := c.Query("session_id")
 	cols, _ := strconv.Atoi(c.DefaultQuery("cols", "80"))
 	rows, _ := strconv.Atoi(c.DefaultQuery("rows", "24"))
+	// raw=1：原始字节透传（ZMODEM 支持，T-005）；record=1：会话录制（T-006）
+	rawMode := c.Query("raw") == "1"
+	record := c.Query("record") == "1"
 
 	// 升级 WebSocket
 	conn, err := wsUpgrader.Upgrade(c.Writer, c.Request, nil)
@@ -115,6 +161,16 @@ func handleTerminalWS(c *gin.Context) {
 		}
 		session.SSHSession = sshSession
 		session.Stdin = stdin
+		session.RawMode = rawMode
+
+		// 会话录制（T-006）
+		if record {
+			if path, err := session.EnableRecording(); err != nil {
+				slog.Warn("[terminal] enable recording failed", "error", err)
+			} else {
+				slog.Info("[terminal] recording enabled", "session", session.ID, "file", path)
+			}
+		}
 
 		// 发送会话创建确认
 		ack, _ := json.Marshal(dto.TerminalMessage{

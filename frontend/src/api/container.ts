@@ -4,27 +4,19 @@ import { request } from './request'
 
 export type ContainerStatus = 'running' | 'stopped' | 'exited' | 'created' | 'paused' | 'restarting'
 
-export interface PortMapping {
-  host_ip?: string
-  host_port: number
-  container_port: number
-  protocol: 'tcp' | 'udp'
-}
-
 export interface Container {
   id: string
   name: string
   image: string
-  image_id?: string
-  status: ContainerStatus
-  state?: string
-  ports: PortMapping[]
-  created_at: string
-  started_at?: string
-  command?: string
+  /** Docker 原始状态描述，如 "Up 24 hours"，仅用于展示 */
+  status: string
+  /** 归一化状态：running / exited / paused / created / restarting，用于状态判定 */
+  state: ContainerStatus
+  /** 端口映射：后端为逗号分隔的字符串，如 "127.0.0.1:15432->5432/tcp, 80/tcp"；未发布端口时为空串 */
+  ports: string
+  /** 创建时间（Unix 秒） */
+  created: number
   labels?: Record<string, string>
-  mounts?: any[]
-  networks?: Record<string, any>
 }
 
 export interface ContainerListData {
@@ -45,9 +37,11 @@ export interface ContainerLogData {
 
 export interface Image {
   id: string
-  repo_tags: string[]
+  /** 仓库标签，如 ["nginx:latest"]；悬空镜像为空数组 */
+  tags: string[]
   size: number
-  created_at: string
+  /** 创建时间（Unix 秒） */
+  created: number
   labels?: Record<string, string>
 }
 
@@ -111,6 +105,14 @@ export function getImages() {
   return request<Image[]>({
     url: '/images',
     method: 'get'
+  })
+}
+
+export function removeImage(id: string, force = false) {
+  return request({
+    url: `/images/${id}`,
+    method: 'delete',
+    params: { force }
   })
 }
 

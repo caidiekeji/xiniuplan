@@ -1,6 +1,8 @@
 package api
 
 import (
+	"fmt"
+
 	"cloudpivot/internal/common"
 	"cloudpivot/internal/dto"
 	"cloudpivot/internal/middleware"
@@ -32,6 +34,7 @@ func RegisterAppStoreRoutes(r *gin.RouterGroup) {
 	r.GET("/apps/:key/status", middleware.RequirePermission(model.PermAppStoreView), h.GetAppStatus)
 	r.POST("/apps/:key/install", middleware.RequirePermission(model.PermAppStoreInstall), h.InstallApp)
 	r.POST("/apps/:key/uninstall", middleware.RequirePermission(model.PermAppStoreInstall), h.UninstallApp)
+	r.POST("/apps/:key/upgrade", middleware.RequirePermission(model.PermAppStoreInstall), h.UpgradeApp)
 
 	// 应用源管理路由
 	RegisterAppSourceRoutes(r)
@@ -51,6 +54,22 @@ func (h *AppStoreHandler) ListApps(c *gin.Context) {
 	common.Success(c, gin.H{"items": apps, "total": len(apps)})
 }
 
+// UpgradeApp POST /apps/:key/upgrade - 升级应用（A-005）
+func (h *AppStoreHandler) UpgradeApp(c *gin.Context) {
+	key := c.Param("key")
+	installed, err := h.svc.UpgradeApp(key)
+	if err != nil {
+		common.Fail(c, common.CodeServerError, "升级失败: "+err.Error())
+		return
+	}
+	common.Success(c, gin.H{
+		"key":     installed.Key,
+		"name":    installed.Name,
+		"version": installed.Version,
+		"status":  installed.Status,
+	})
+}
+
 // GetApp GET /apps/:key
 func (h *AppStoreHandler) GetApp(c *gin.Context) {
 	key := c.Param("key")
@@ -68,6 +87,16 @@ func (h *AppStoreHandler) ListInstalled(c *gin.Context) {
 	if err != nil {
 		common.Fail(c, common.CodeServerError, "获取已安装应用失败: "+err.Error())
 		return
+	}
+	// 访问地址按请求 Host 拼装——前端「打开」按钮依赖 access_url，
+	// 此前该字段从不提供，按钮永远提示"无访问地址"（2026-10-23 闭环审计）
+	host := c.Request.Host
+	if host != "" {
+		for i := range apps {
+			if apps[i].HostPort > 0 {
+				apps[i].AccessURL = fmt.Sprintf("http://%s:%d", host, apps[i].HostPort)
+			}
+		}
 	}
 	common.Success(c, apps)
 }
@@ -99,6 +128,7 @@ func (h *AppStoreHandler) InstallApp(c *gin.Context) {
 	}
 
 	common.Success(c, dto.InstalledAppResponse{
+		Success:         installed.Status != "error",
 		ID:              installed.ID,
 		Key:             installed.Key,
 		Name:            installed.Name,

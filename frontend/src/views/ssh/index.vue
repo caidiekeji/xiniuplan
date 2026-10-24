@@ -1,29 +1,10 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, h } from 'vue'
-import {
-  NTabs,
-  NTabPane,
-  NButton,
-  NIcon,
-  NForm,
-  NFormItem,
-  NInput,
-  NInputNumber,
-  NSwitch,
-  NSelect,
-  NAlert,
-  NText,
-  NEmpty,
-  NSpace,
-  useMessage
-} from 'naive-ui'
-import {
-  AddOutline,
-  TrashOutline,
-  ShieldHalfOutline,
-  BanOutline,
-  CheckmarkCircleOutline
-} from '@vicons/ionicons5'
+import { useI18n } from 'vue-i18n'
+import { NTabs, NTabPane, NButton, NIcon, NForm, NFormItem, NInput, NInputNumber, NSwitch, NSelect, NAlert, NText, NSpace } from 'naive-ui'
+import { useMessage } from '@/composables/useMessage'
+import { AddOutline, TrashOutline, BanOutline, CheckmarkCircleOutline } from '@vicons/ionicons5'
+import { useQueryState } from '@/composables/useQueryState'
 import {
   PageCard,
   DataTable,
@@ -53,6 +34,7 @@ import {
 } from '@/api/ssh'
 
 const message = useMessage()
+const { t } = useI18n()
 
 /* ==================== Tab 1: SSH 配置 ==================== */
 
@@ -93,10 +75,10 @@ async function handleSaveConfig() {
   configSaving.value = true
   try {
     await updateSSHConfig({ ...sshConfig.value })
-    message.success('SSH 配置已保存')
+    message.success(t('ssh.message.saveConfigSuccess'))
     showSaveConfirm.value = false
   } catch (e: any) {
-    message.error(e.message || '保存失败')
+    message.error(e.message || t('ssh.message.saveFailed'))
   } finally {
     configSaving.value = false
   }
@@ -117,7 +99,7 @@ const deleteKeyLoading = ref(false)
 
 const keyColumns = computed<DataTableColumns>(() => [
   {
-    title: '密钥类型',
+    title: t('ssh.columns.type'),
     key: 'type',
     width: 120,
     render: (row: any) => {
@@ -127,7 +109,7 @@ const keyColumns = computed<DataTableColumns>(() => [
     }
   },
   {
-    title: '注释/名称',
+    title: t('ssh.columns.comment'),
     key: 'comment',
     width: 180,
     render: (row: any) => row.comment || '—'
@@ -139,13 +121,13 @@ const keyColumns = computed<DataTableColumns>(() => [
     render: (row: any) => h('span', { class: 'mono' }, row.fingerprint)
   },
   {
-    title: '添加时间',
+    title: t('ssh.columns.createdAt'),
     key: 'created_at',
     width: 180,
     render: (row: any) => h('span', { class: 'mono' }, row.created_at)
   },
   {
-    title: '操作',
+    title: t('ssh.columns.actions'),
     key: 'actions',
     width: 80,
     render: (row: any) =>
@@ -186,11 +168,11 @@ function validatePublicKey(key: string): boolean {
 
 async function handleAddKey() {
   if (!addKeyForm.value.key.trim()) {
-    message.warning('请输入公钥内容')
+    message.warning(t('ssh.keys.enterPublicKey'))
     return
   }
   if (!validatePublicKey(addKeyForm.value.key)) {
-    message.warning('公钥格式不正确，应以 ssh-rsa / ssh-ed25519 / ecdsa-sha2- 开头')
+    message.warning(t('ssh.keys.invalidFormat'))
     return
   }
   addKeyLoading.value = true
@@ -199,12 +181,12 @@ async function handleAddKey() {
       public_key: addKeyForm.value.key.trim(),
       comment: addKeyForm.value.comment.trim() || undefined
     })
-    message.success('公钥添加成功')
+    message.success(t('ssh.keys.addSuccess'))
     showAddKeyModal.value = false
     addKeyForm.value = { key: '', comment: '' }
     loadSSHKeys()
   } catch (e: any) {
-    message.error(e.message || '添加失败')
+    message.error(e.message || t('ssh.keys.addFailed'))
   } finally {
     addKeyLoading.value = false
   }
@@ -214,11 +196,11 @@ async function handleDeleteKey() {
   deleteKeyLoading.value = true
   try {
     await deleteSSHKey(deleteKeyDialog.value.fingerprint)
-    message.success('密钥已删除')
+    message.success(t('ssh.keys.deleteSuccess'))
     deleteKeyDialog.value.show = false
     loadSSHKeys()
   } catch (e: any) {
-    message.error(e.message || '删除失败')
+    message.error(e.message || t('ssh.keys.deleteFailed'))
   } finally {
     deleteKeyLoading.value = false
   }
@@ -226,47 +208,50 @@ async function handleDeleteKey() {
 
 /* ==================== Tab 3: 登录日志 ==================== */
 
+// Tab / 分页 / 筛选 URL 化（D19）：刷新与深链可还原现场
+const activeTab = useQueryState('tab', 'config')
+
 const logsLoading = ref(false)
 const loginLogs = ref<SSHLoginLog[]>([])
 const logsTotal = ref(0)
-const logsPage = ref(1)
+const logsPage = useQueryState('page', 1)
 const logsPageSize = ref(20)
-const logStatusFilter = ref<'all' | 'success' | 'failed'>('all')
+const logStatusFilter = useQueryState<'all' | 'success' | 'failed'>('status', 'all')
 const logsApiAvailable = ref(true)
 
 const logColumns = computed<DataTableColumns>(() => [
   {
-    title: '时间',
+    title: t('ssh.logs.columns.time'),
     key: 'time',
     width: 180,
     render: (row: any) => h('span', { class: 'mono' }, row.time)
   },
   {
-    title: '用户',
+    title: t('ssh.logs.columns.user'),
     key: 'user',
     width: 120,
     render: (row: any) => h('span', { class: 'mono' }, row.user)
   },
   {
-    title: 'IP 地址',
+    title: t('ssh.logs.columns.ip'),
     key: 'ip',
     width: 160,
     render: (row: any) => h('span', { class: 'mono' }, row.ip)
   },
   {
-    title: '登录方式',
+    title: t('ssh.logs.columns.method'),
     key: 'method',
     width: 120,
     render: (row: any) => h('span', { class: 'mono' }, row.method)
   },
   {
-    title: '结果',
+    title: t('ssh.logs.columns.status'),
     key: 'status',
     width: 100,
     render: (row: any) =>
       h(StatusTag, {
         status: row.status === 'success' ? 'running' : 'error',
-        text: row.status === 'success' ? '成功' : '失败'
+        text: row.status === 'success' ? t('ssh.status.success') : t('ssh.status.failed')
       })
   }
 ])
@@ -275,11 +260,11 @@ const logRowProps = computed(() => (row: any) => ({
   style: row.status === 'failed' ? 'background: var(--err-soft); opacity: 0.6;' : undefined
 }))
 
-const statusFilterOptions = [
-  { label: '全部', value: 'all' },
-  { label: '成功', value: 'success' },
-  { label: '失败', value: 'failed' }
-]
+const statusFilterOptions = computed(() => [
+  { label: t('ssh.filter.all'), value: 'all' },
+  { label: t('ssh.status.success'), value: 'success' },
+  { label: t('ssh.status.failed'), value: 'failed' }
+])
 
 async function loadSSHLogs() {
   logsLoading.value = true
@@ -296,24 +281,12 @@ async function loadSSHLogs() {
     }
   } catch {
     logsApiAvailable.value = false
-    generateMockLogs()
+    loginLogs.value = []
+    logsTotal.value = 0
+    message.error(t('ssh.logs.loadError'))
   } finally {
     logsLoading.value = false
   }
-}
-
-function generateMockLogs() {
-  loginLogs.value = [
-    { time: '2026-09-09 10:23:15', user: 'root', ip: '192.168.1.100', status: 'success', method: 'publickey' },
-    { time: '2026-09-09 09:45:22', user: 'admin', ip: '10.0.0.55', status: 'success', method: 'password' },
-    { time: '2026-09-09 08:12:03', user: 'root', ip: '45.33.32.156', status: 'failed', method: 'password' },
-    { time: '2026-09-09 08:11:58', user: 'root', ip: '45.33.32.156', status: 'failed', method: 'password' },
-    { time: '2026-09-09 08:11:52', user: 'admin', ip: '45.33.32.156', status: 'failed', method: 'password' },
-    { time: '2026-09-08 22:30:10', user: 'deploy', ip: '172.16.0.10', status: 'success', method: 'publickey' },
-    { time: '2026-09-08 18:05:44', user: 'root', ip: '203.0.113.50', status: 'failed', method: 'password' },
-    { time: '2026-09-08 15:20:33', user: 'ubuntu', ip: '192.168.1.200', status: 'success', method: 'publickey' }
-  ]
-  logsTotal.value = loginLogs.value.length
 }
 
 /* ==================== Tab 4: Fail2ban 防护 ==================== */
@@ -342,56 +315,56 @@ const unbanLoading = ref(false)
 
 const f2bStatCards = computed<Array<{ title: string; value: string | number; unit?: string; accent: string }>>(() => [
   {
-    title: '防护状态',
-    value: f2bStatus.value.installed ? (f2bStatus.value.enabled ? '已启用' : '已禁用') : '未安装',
+    title: t('ssh.fail2ban.stats.protectionStatus'),
+    value: f2bStatus.value.installed ? (f2bStatus.value.enabled ? t('ssh.fail2ban.stats.enabled') : t('ssh.fail2ban.stats.disabled')) : t('ssh.fail2ban.stats.notInstalled'),
     accent: f2bStatus.value.installed ? (f2bStatus.value.enabled ? 'ok' : 'warn') : 'info'
   },
   {
-    title: '当前封禁 IP',
+    title: t('ssh.fail2ban.stats.bannedIps'),
     value: f2bStatus.value.banned_ips.length,
     accent: 'err'
   },
   {
-    title: '最大重试次数',
+    title: t('ssh.form.maxRetry'),
     value: f2bConfig.value.max_retry,
-    unit: '次',
+    unit: t('ssh.fail2ban.stats.unitTimes'),
     accent: 'warn'
   },
   {
-    title: '封禁时长',
+    title: t('ssh.fail2ban.stats.banDuration'),
     value: Math.round(f2bConfig.value.ban_time / 60),
-    unit: '分钟',
+    unit: t('ssh.fail2ban.stats.unitMinutes'),
     accent: 'acc'
   }
 ])
 
 const bannedIPColumns = computed<DataTableColumns>(() => [
   {
-    title: 'IP 地址',
+    title: t('ssh.columns.ip'),
     key: 'ip',
     width: 160,
     render: (row: any) => h('span', { class: 'mono' }, row.ip)
   },
   {
-    title: '监狱',
+    title: t('ssh.fail2ban.columns.jail'),
     key: 'jail',
     width: 100,
     render: (row: any) => h('span', { class: 'mono' }, row.jail || 'sshd')
   },
   {
-    title: '封禁时间',
+    title: t('ssh.fail2ban.columns.bannedAt'),
     key: 'banned_at',
     width: 180,
     render: (row: any) => h('span', { class: 'mono' }, row.banned_at)
   },
   {
-    title: '原因',
+    title: t('ssh.fail2ban.columns.reason'),
     key: 'reason',
     ellipsis: { tooltip: true },
-    render: (row: any) => row.reason || '暴力破解'
+    render: (row: any) => row.reason || t('ssh.fail2ban.defaultReason')
   },
   {
-    title: '操作',
+    title: t('ssh.columns.actions'),
     key: 'actions',
     width: 80,
     render: (row: any) =>
@@ -405,7 +378,7 @@ const bannedIPColumns = computed<DataTableColumns>(() => [
             unbanDialog.value = { show: true, ip: row.ip }
           }
         },
-        () => '解封'
+        () => t('ssh.actions.unban')
       )
   }
 ])
@@ -421,32 +394,21 @@ async function loadFail2ban() {
     }
   } catch {
     f2bApiAvailable.value = false
-    generateMockFail2ban()
+    f2bStatus.value = { enabled: false, installed: false, banned_ips: [] }
+    message.error(t('ssh.fail2ban.loadError'))
   } finally {
     f2bLoading.value = false
   }
-}
-
-function generateMockFail2ban() {
-  f2bStatus.value = {
-    enabled: true,
-    installed: true,
-    banned_ips: [
-      { ip: '45.33.32.156', jail: 'sshd', banned_at: '2026-09-09 08:12:10', reason: '多次密码登录失败' },
-      { ip: '203.0.113.50', jail: 'sshd', banned_at: '2026-09-08 18:06:00', reason: '暴力破解尝试' }
-    ]
-  }
-  f2bConfig.value.enabled = true
 }
 
 async function handleSaveF2bConfig() {
   f2bConfigSaving.value = true
   try {
     await updateFail2banConfig({ ...f2bConfig.value })
-    message.success('Fail2ban 配置已保存')
+    message.success(t('ssh.fail2ban.saveSuccess'))
     loadFail2ban()
   } catch (e: any) {
-    message.error(e.message || '保存失败')
+    message.error(e.message || t('ssh.message.saveFailed'))
   } finally {
     f2bConfigSaving.value = false
   }
@@ -456,11 +418,11 @@ async function handleUnban() {
   unbanLoading.value = true
   try {
     await unbanIP(unbanDialog.value.ip)
-    message.success(`IP ${unbanDialog.value.ip} 已解封`)
+    message.success(t('ssh.message.unbanSuccess', { ip: unbanDialog.value.ip }))
     unbanDialog.value.show = false
     loadFail2ban()
   } catch (e: any) {
-    message.error(e.message || '解封失败')
+    message.error(e.message || t('ssh.message.unbanFailed'))
   } finally {
     unbanLoading.value = false
   }
@@ -468,18 +430,18 @@ async function handleUnban() {
 
 async function handleBanIP() {
   if (!banIPInput.value.trim()) {
-    message.warning('请输入要封禁的 IP 地址')
+    message.warning(t('ssh.message.enterBanIp'))
     return
   }
   banIPLoading.value = true
   try {
     await banIP(banIPInput.value.trim(), banReasonInput.value.trim() || undefined)
-    message.success(`IP ${banIPInput.value} 已封禁`)
+    message.success(t('ssh.message.banSuccess', { ip: banIPInput.value }))
     banIPInput.value = ''
     banReasonInput.value = ''
     loadFail2ban()
   } catch (e: any) {
-    message.error(e.message || '封禁失败')
+    message.error(e.message || t('ssh.message.banFailed'))
   } finally {
     banIPLoading.value = false
   }
@@ -497,21 +459,21 @@ onMounted(() => {
 
 <template>
   <div class="ssh-page">
-    <NTabs type="line" animated>
+    <NTabs v-model:value="activeTab" type="line" animated>
       <!-- ==================== Tab 1: SSH 配置 ==================== -->
-      <NTabPane name="config" tab="SSH 配置">
-        <PageCard title="SSH 服务配置" subtitle="管理 SSH 服务端安全参数">
+      <NTabPane name="config" :tab="t('ssh.tabs.config')">
+        <PageCard :title="t('ssh.config.title')" :subtitle="t('ssh.config.subtitle')">
           <NAlert
             v-if="!configApiAvailable"
             type="warning"
             :show-icon="true"
             style="margin-bottom: var(--space-4)"
           >
-            当前环境无法连接 SSH 服务（Windows 开发环境无 SSH 服务），以下为默认配置展示。
+            {{ t('ssh.config.apiUnavailable') }}
           </NAlert>
 
           <NForm label-placement="left" label-width="180" :show-feedback="false">
-            <NFormItem label="SSH 端口">
+            <NFormItem :label="t('ssh.form.port')">
               <NInputNumber
                 v-model:value="sshConfig.port"
                 :min="1"
@@ -520,43 +482,43 @@ onMounted(() => {
                 style="max-width: 200px"
               />
               <NText depth="3" style="margin-left: var(--space-3); font-size: var(--fs-caption)">
-                修改端口后需确保防火墙已放行新端口
+                {{ t('ssh.form.portHint') }}
               </NText>
             </NFormItem>
 
-            <NFormItem label="允许 Root 登录">
+            <NFormItem :label="t('ssh.form.permitRootLogin')">
               <NSwitch v-model:value="sshConfig.permit_root_login" />
               <StatusTag
                 v-if="!sshConfig.permit_root_login"
                 status="running"
-                text="安全"
+                :text="t('ssh.status.safe')"
                 style="margin-left: var(--space-3)"
               />
               <StatusTag
                 v-else
                 status="warning"
-                text="风险"
+                :text="t('ssh.status.risk')"
                 style="margin-left: var(--space-3)"
               />
             </NFormItem>
 
-            <NFormItem label="允许密码登录">
+            <NFormItem :label="t('ssh.form.permitPasswordLogin')">
               <NSwitch v-model:value="sshConfig.permit_password_login" />
               <StatusTag
                 v-if="!sshConfig.permit_password_login"
                 status="running"
-                text="安全（仅密钥）"
+                :text="t('ssh.status.safeKeyOnly')"
                 style="margin-left: var(--space-3)"
               />
               <StatusTag
                 v-else
                 status="warning"
-                text="风险"
+                :text="t('ssh.status.risk')"
                 style="margin-left: var(--space-3)"
               />
             </NFormItem>
 
-            <NFormItem label="最大认证尝试次数">
+            <NFormItem :label="t('ssh.form.maxAuthTries')">
               <NInputNumber
                 v-model:value="sshConfig.max_auth_tries"
                 :min="1"
@@ -566,7 +528,7 @@ onMounted(() => {
               />
             </NFormItem>
 
-            <NFormItem label="客户端保活间隔(秒)">
+            <NFormItem :label="t('ssh.form.clientAliveInterval')">
               <NInputNumber
                 v-model:value="sshConfig.client_alive_interval"
                 :min="0"
@@ -574,14 +536,14 @@ onMounted(() => {
                 style="max-width: 200px"
               />
               <NText depth="3" style="margin-left: var(--space-3); font-size: var(--fs-caption)">
-                0 表示不发送保活包
+                {{ t('ssh.form.clientAliveHint') }}
               </NText>
             </NFormItem>
 
-            <NFormItem label="允许登录用户">
+            <NFormItem :label="t('ssh.form.allowUsers')">
               <NInput
                 v-model:value="sshConfig.allow_users"
-                placeholder="逗号分隔，留空表示允许全部用户"
+                :placeholder="t('ssh.form.allowUsersPlaceholder')"
                 style="max-width: 400px"
               />
             </NFormItem>
@@ -595,7 +557,7 @@ onMounted(() => {
                 <template #icon>
                   <NIcon><CheckmarkCircleOutline /></NIcon>
                 </template>
-                保存配置
+                {{ t('ssh.actions.saveConfig') }}
               </NButton>
             </NFormItem>
           </NForm>
@@ -603,14 +565,14 @@ onMounted(() => {
       </NTabPane>
 
       <!-- ==================== Tab 2: 密钥管理 ==================== -->
-      <NTabPane name="keys" tab="密钥管理">
-        <PageCard title="SSH 公钥管理" subtitle="管理授权登录的公钥">
+      <NTabPane name="keys" :tab="t('ssh.tabs.keys')">
+        <PageCard :title="t('ssh.keys.title')" :subtitle="t('ssh.keys.subtitle')">
           <template #extra>
             <NButton type="primary" size="small" @click="showAddKeyModal = true">
               <template #icon>
                 <NIcon><AddOutline /></NIcon>
               </template>
-              添加公钥
+              {{ t('ssh.actions.addKey') }}
             </NButton>
           </template>
 
@@ -620,7 +582,7 @@ onMounted(() => {
             :show-icon="true"
             style="margin-bottom: var(--space-4)"
           >
-            当前环境无法读取 SSH 密钥列表（Windows 开发环境无 SSH 服务）。
+            {{ t('ssh.keys.apiUnavailable') }}
           </NAlert>
 
           <DataTable
@@ -634,12 +596,12 @@ onMounted(() => {
       </NTabPane>
 
       <!-- ==================== Tab 3: 登录日志 ==================== -->
-      <NTabPane name="logs" tab="登录日志">
-        <PageCard title="SSH 登录日志" subtitle="查看 SSH 登录记录与失败尝试">
+      <NTabPane name="logs" :tab="t('ssh.tabs.logs')">
+        <PageCard :title="t('ssh.logs.title')" :subtitle="t('ssh.logs.subtitle')">
           <div class="ssh__filter">
             <NSelect
               v-model:value="logStatusFilter"
-              placeholder="全部状态"
+              :placeholder="t('ssh.logs.statusPlaceholder')"
               size="small"
               style="width: 140px"
               :options="statusFilterOptions"
@@ -653,7 +615,7 @@ onMounted(() => {
             :show-icon="true"
             style="margin-bottom: var(--space-4)"
           >
-            当前环境无法读取 SSH 日志（Windows 开发环境无 SSH 服务），以下为示例数据。
+            {{ t('ssh.logs.apiUnavailable') }}
           </NAlert>
 
           <DataTable
@@ -674,7 +636,7 @@ onMounted(() => {
       </NTabPane>
 
       <!-- ==================== Tab 4: Fail2ban 防护 ==================== -->
-      <NTabPane name="fail2ban" tab="Fail2ban 防护">
+      <NTabPane name="fail2ban" :tab="t('ssh.tabs.fail2ban')">
         <div class="ssh__f2b-stats">
           <StatCard
             v-for="(stat, idx) in f2bStatCards"
@@ -693,8 +655,8 @@ onMounted(() => {
           :show-icon="true"
           style="margin-bottom: var(--space-4)"
         >
-          <template #header>Fail2ban 未安装</template>
-          请先安装 Fail2ban：<span class="mono">apt install fail2ban</span> 或
+          <template #header>{{ t('ssh.fail2ban.notInstalledHeader') }}</template>
+          {{ t('ssh.fail2ban.installHint') }}<span class="mono">apt install fail2ban</span> {{ t('ssh.fail2ban.installOr') }}
           <span class="mono">yum install fail2ban</span>
         </NAlert>
 
@@ -704,12 +666,12 @@ onMounted(() => {
           :show-icon="true"
           style="margin-bottom: var(--space-4)"
         >
-          当前环境无法连接 Fail2ban 服务（Windows 开发环境），以下为示例数据。
+          {{ t('ssh.fail2ban.apiUnavailable') }}
         </NAlert>
 
-        <PageCard title="封禁配置" subtitle="配置 Fail2ban 自动封禁策略" style="margin-bottom: var(--space-4)">
+        <PageCard :title="t('ssh.fail2ban.configTitle')" :subtitle="t('ssh.fail2ban.configSubtitle')" style="margin-bottom: var(--space-4)">
           <NForm label-placement="left" label-width="180" :show-feedback="false">
-            <NFormItem label="最大重试次数">
+            <NFormItem :label="t('ssh.form.maxRetry')">
               <NInputNumber
                 v-model:value="f2bConfig.max_retry"
                 :min="1"
@@ -718,7 +680,7 @@ onMounted(() => {
                 style="max-width: 200px"
               />
             </NFormItem>
-            <NFormItem label="封禁时长(分钟)">
+            <NFormItem :label="t('ssh.form.banDuration')">
               <NInputNumber
                 v-model:value="f2bConfig.ban_time"
                 :min="1"
@@ -726,7 +688,7 @@ onMounted(() => {
                 style="max-width: 200px"
               />
             </NFormItem>
-            <NFormItem label="检测窗口(分钟)">
+            <NFormItem :label="t('ssh.form.findWindow')">
               <NInputNumber
                 v-model:value="f2bConfig.find_time"
                 :min="1"
@@ -741,22 +703,22 @@ onMounted(() => {
                 :disabled="!f2bStatus.installed"
                 @click="handleSaveF2bConfig"
               >
-                保存配置
+                {{ t('ssh.actions.saveConfig') }}
               </NButton>
             </NFormItem>
           </NForm>
         </PageCard>
 
-        <PageCard title="手动封禁" subtitle="主动封禁可疑 IP 地址" style="margin-bottom: var(--space-4)">
+        <PageCard :title="t('ssh.fail2ban.manualTitle')" :subtitle="t('ssh.fail2ban.manualSubtitle')" style="margin-bottom: var(--space-4)">
           <NSpace align="center">
             <NInput
               v-model:value="banIPInput"
-              placeholder="输入 IP 地址，例如 192.168.1.100"
+              :placeholder="t('ssh.fail2ban.ipPlaceholder')"
               style="width: 260px"
             />
             <NInput
               v-model:value="banReasonInput"
-              placeholder="封禁原因（可选）"
+              :placeholder="t('ssh.fail2ban.reasonPlaceholder')"
               style="width: 220px"
             />
             <NButton
@@ -768,12 +730,12 @@ onMounted(() => {
               <template #icon>
                 <NIcon><BanOutline /></NIcon>
               </template>
-              封禁
+              {{ t('ssh.actions.ban') }}
             </NButton>
           </NSpace>
         </PageCard>
 
-        <PageCard title="封禁 IP 列表" subtitle="当前被 Fail2ban 封禁的 IP">
+        <PageCard :title="t('ssh.fail2ban.listTitle')" :subtitle="t('ssh.fail2ban.listSubtitle')">
           <DataTable
             :columns="bannedIPColumns"
             :data="f2bStatus.banned_ips"
@@ -788,35 +750,35 @@ onMounted(() => {
     <!-- ==================== 添加公钥对话框 ==================== -->
     <ModalForm
       :show="showAddKeyModal"
-      title="添加 SSH 公钥"
+      :title="t('ssh.keys.modalTitle')"
       :loading="addKeyLoading"
       :width="600"
       @update:show="(v: boolean) => (showAddKeyModal = v)"
       @submit="handleAddKey"
     >
-      <NFormItem label="公钥内容" required>
+      <NFormItem :label="t('ssh.keys.keyLabel')" required>
         <NInput
           v-model:value="addKeyForm.key"
           type="textarea"
-          placeholder="ssh-rsa AAAA... 或 ssh-ed25519 AAAA..."
+          :placeholder="t('ssh.keys.keyPlaceholder')"
           :autosize="{ minRows: 4, maxRows: 8 }"
         />
       </NFormItem>
-      <NFormItem label="注释">
-        <NInput v-model:value="addKeyForm.comment" placeholder="例如：我的笔记本电脑" />
+      <NFormItem :label="t('ssh.keys.commentLabel')">
+        <NInput v-model:value="addKeyForm.comment" :placeholder="t('ssh.keys.commentPlaceholder')" />
       </NFormItem>
       <NAlert type="info" :show-icon="true" style="margin-top: var(--space-2)">
-        将 <span class="mono">~/.ssh/id_rsa.pub</span> 或
-        <span class="mono">~/.ssh/id_ed25519.pub</span> 文件内容粘贴到此处
+        {{ t('ssh.keys.pasteHintPrefix') }}<span class="mono">~/.ssh/id_rsa.pub</span> {{ t('ssh.keys.pasteHintOr') }}
+        <span class="mono">~/.ssh/id_ed25519.pub</span>{{ t('ssh.keys.pasteHintSuffix') }}
       </NAlert>
     </ModalForm>
 
     <!-- ==================== 保存 SSH 配置确认 ==================== -->
     <ConfirmDialog
       :show="showSaveConfirm"
-      title="保存 SSH 配置"
-      content="修改 SSH 配置可能导致无法连接服务器，请确保已测试新配置。确认继续？"
-      confirm-text="确认保存"
+      :title="t('ssh.confirm.saveTitle')"
+      :content="t('ssh.confirm.saveContent')"
+      :confirm-text="t('ssh.confirm.saveConfirmText')"
       type="warning"
       :loading="configSaving"
       @update:show="(v: boolean) => (showSaveConfirm = v)"
@@ -826,9 +788,9 @@ onMounted(() => {
     <!-- ==================== 删除密钥确认 ==================== -->
     <ConfirmDialog
       :show="deleteKeyDialog.show"
-      title="删除公钥"
-      :content="`确定要删除公钥（${deleteKeyDialog.comment || deleteKeyDialog.fingerprint}）吗？删除后该密钥将无法用于登录。`"
-      confirm-text="删除"
+      :title="t('ssh.confirm.deleteKeyTitle')"
+      :content="t('ssh.confirm.deleteKeyContent', { name: deleteKeyDialog.comment || deleteKeyDialog.fingerprint })"
+      :confirm-text="t('ssh.confirm.deleteKeyConfirmText')"
       type="error"
       :loading="deleteKeyLoading"
       @update:show="(v: boolean) => (deleteKeyDialog.show = v)"
@@ -838,9 +800,9 @@ onMounted(() => {
     <!-- ==================== 解封确认 ==================== -->
     <ConfirmDialog
       :show="unbanDialog.show"
-      title="解封 IP"
-      :content="`确定要解封 IP ${unbanDialog.ip} 吗？解封后该 IP 可再次尝试登录。`"
-      confirm-text="解封"
+      :title="t('ssh.confirm.unbanTitle')"
+      :content="t('ssh.confirm.unbanContent', { ip: unbanDialog.ip })"
+      :confirm-text="t('ssh.confirm.unbanConfirmText')"
       type="info"
       :loading="unbanLoading"
       @update:show="(v: boolean) => (unbanDialog.show = v)"
@@ -853,7 +815,7 @@ onMounted(() => {
 .ssh-page {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--space-6);
 }
 
 .ssh__filter {

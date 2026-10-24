@@ -3,11 +3,10 @@ package monitor
 import (
 	"context"
 	"fmt"
-	"io"
-	"net/http"
 	"sort"
 	"time"
 
+	"cloudpivot/internal/common"
 	"cloudpivot/internal/dto"
 	"cloudpivot/internal/model"
 
@@ -208,17 +207,7 @@ func (s *Service) getSystemInfo() (*dto.SystemInfo, error) {
 	return info, nil
 }
 
-// getPublicIP 尝试获取公网 IP（超时3秒）
+// getPublicIP 获取公网 IP（走公共缓存：后台定时刷新，接口路径零阻塞）
 func getPublicIP() string {
-	client := &http.Client{Timeout: 3 * time.Second}
-	resp, err := client.Get("https://api.ipify.org?format=text")
-	if err != nil {
-		return ""
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return ""
-	}
-	return string(body)
+	return common.GetPublicIP()
 }

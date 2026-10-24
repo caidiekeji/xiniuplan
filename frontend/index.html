@@ -3,12 +3,96 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="description" content="云枢面板 — 轻量级 Linux 服务器可视化管理平台" />
     <title>云枢面板 CloudPivot</title>
+
+    <!-- 首屏样式静态加载：此前 main.css 走 bootstrap 的动态 import，
+         导致 JS 下载执行期间页面完全无样式（深色主题下呈现为整屏黑屏）。 -->
+    <link rel="stylesheet" href="/src/styles/main.css" />
+
+    <!-- 首屏主题同步：浅色用户不应先看到深色骨架再闪变一次 -->
+    <script>
+      try {
+        var t = localStorage.getItem('cloudpivot_theme')
+        if (t === 'light' || t === 'dark') {
+          document.documentElement.setAttribute('data-theme', t)
+        }
+      } catch (e) {}
+    </script>
+
+    <!--__PANEL_BASE__-->
+
+    <!-- 首屏骨架：JS 就绪前显示品牌与加载态，避免空白/黑屏空窗。
+         Vue 挂载时会清空 #app 内容，骨架自动消失，无需额外清理逻辑。
+         颜色用 token 变量并带 fallback —— 样式表未就绪时也能正常显示。 -->
+    <style>
+      .boot {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        background: var(--bg, #0e1117);
+        color: var(--ink, #e8ecf2);
+        font-family: var(--font-sans, system-ui, sans-serif);
+      }
+      .boot__mark {
+        width: 44px;
+        height: 44px;
+        margin-bottom: 6px;
+        opacity: 0.9;
+      }
+      .boot__name {
+        font-size: 17px;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+      }
+      .boot__desc {
+        font-size: 12px;
+        color: var(--sub, #9aa5b8);
+      }
+      .boot__bar {
+        position: relative;
+        width: 132px;
+        height: 2px;
+        margin-top: 14px;
+        overflow: hidden;
+        border-radius: 2px;
+        background: var(--line, #2a3348);
+      }
+      .boot__bar i {
+        position: absolute;
+        inset: 0 auto 0 0;
+        width: 42%;
+        border-radius: 2px;
+        background: var(--acc, #1ba784);
+        animation: boot-slide 1.15s ease-in-out infinite;
+      }
+      @keyframes boot-slide {
+        0% { transform: translateX(-100%); }
+        100% { transform: translateX(238%); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .boot__bar i { animation: none; width: 100%; opacity: 0.5; }
+      }
+    </style>
   </head>
   <body>
-    <div id="app"></div>
+    <div id="app">
+      <div class="boot">
+        <svg class="boot__mark" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <rect x="3" y="3" width="58" height="58" rx="16" fill="var(--surface2, #232b3d)" />
+          <path d="M32 8 C30 14 28 20 28 26 L36 26 C36 20 34 14 32 8 Z"
+            stroke="var(--acc, #1ba784)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+        <div class="boot__name">云枢面板</div>
+        <div class="boot__desc">服务器管理面板</div>
+        <div class="boot__bar"><i></i></div>
+      </div>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

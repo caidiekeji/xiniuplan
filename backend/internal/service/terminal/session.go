@@ -19,6 +19,10 @@ type TerminalSession struct {
 	SSHClient  *ssh.Client
 	SSHSession *ssh.Session
 	Stdin      io.WriteCloser
+	// RawMode（T-005 ZMODEM）：true 时输出以 BinaryMessage 原样转发，不做 JSON 封装
+	RawMode bool
+	// RecordFile（T-006 会话录制）：非 nil 时输出同步写入录制文件
+	RecordFile io.WriteCloser
 	mu         sync.Mutex
 	closed     bool
 	lastActive time.Time

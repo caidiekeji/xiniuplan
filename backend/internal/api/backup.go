@@ -34,6 +34,9 @@ func RegisterBackupRoutes(r *gin.RouterGroup) {
 	r.DELETE("/backups/:id", middleware.RequirePermission(model.PermBackupDelete), h.Delete)
 	r.POST("/backups/:id/restore", middleware.RequirePermission(model.PermBackupCreate), h.Restore)
 	r.GET("/backups/:id/download", middleware.RequirePermission(model.PermBackupView), h.Download)
+
+	// 远程存储配置与推送
+	RegisterRemoteStorageRoutes(r)
 }
 
 // parseBackupID 从路径参数解析备份 ID

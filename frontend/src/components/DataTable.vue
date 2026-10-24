@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { NDataTable, NSpin, NEmpty } from 'naive-ui'
+import { NDataTable, NSpin, NEmpty, NButton } from 'naive-ui'
 import type { DataTableColumns, DataTableProps } from 'naive-ui'
 
 const { t } = useI18n()
 
 const props = withDefaults(
   defineProps<{
-    columns: DataTableColumns
+    columns: DataTableColumns<any>
     data: any[]
     loading?: boolean
     pagination?: DataTableProps['pagination'] | false
@@ -20,6 +20,8 @@ const props = withDefaults(
     virtualScroll?: boolean
     maxHeight?: number | string
     scrollX?: number | string
+    /** 加载失败时的错误文案；非空则渲染错误态（含重试按钮），优先于空态 */
+    error?: string | null
   }>(),
   {
     loading: false,
@@ -37,10 +39,12 @@ const emit = defineEmits<{
   (e: 'update:checkedRowKeys', val: (string | number)[]): void
   (e: 'rowDblclick', row: any, index: number): void
   (e: 'rowContextmenu', row: any, index: number, event: MouseEvent): void
+  (e: 'retry'): void
 }>()
 
 // 后端空列表可能序列化为 null（Go nil slice），兜底为空数组防止渲染崩溃
 const safeData = computed(() => (Array.isArray(props.data) ? props.data : []))
+const safeColumns = computed(() => (Array.isArray(props.columns) ? props.columns : []))
 
 const internalPagination = computed(() => {
   if (props.pagination === false) return false
@@ -68,7 +72,7 @@ function handleCheckedRowKeysChange(val: (string | number)[]) {
   <div class="data-table">
     <NSpin :show="loading">
       <NDataTable
-        :columns="columns"
+        :columns="safeColumns"
         :data="safeData"
         :pagination="internalPagination"
         :bordered="bordered"
@@ -84,7 +88,16 @@ function handleCheckedRowKeysChange(val: (string | number)[]) {
         @row-contextmenu="(row: any, index: number, e: MouseEvent) => emit('rowContextmenu', row, index, e)"
       >
         <template #empty>
-          <NEmpty :description="t('common.noData')" />
+          <!-- 错误态优先于空态：加载失败 ≠ 没有数据，需给出重试入口 -->
+          <slot name="empty" :error="error ?? null">
+            <NEmpty :description="error || t('common.noData')">
+              <template v-if="error" #extra>
+                <slot name="retry">
+                  <NButton size="small" @click="emit('retry')">{{ t('common.retry') }}</NButton>
+                </slot>
+              </template>
+            </NEmpty>
+          </slot>
         </template>
       </NDataTable>
     </NSpin>
@@ -120,11 +133,19 @@ function handleCheckedRowKeysChange(val: (string | number)[]) {
   background: var(--surface2);
 }
 
-/* 移动端：表格横向滚动 */
+/* 移动端：表格横向滚动；压缩样式单点定义于此（审计 D25，勿在 main.css 重复） */
 @media (max-width: 768px) {
   .data-table :deep(.n-data-table-th),
   .data-table :deep(.n-data-table-td) {
-    padding: 8px 12px !important;
+    padding: var(--space-2) var(--space-3) !important;
+    font-size: 12px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .data-table :deep(.n-data-table-th),
+  .data-table :deep(.n-data-table-td) {
+    padding: var(--space-2) var(--space-2) !important;
     font-size: 12px !important;
   }
 }

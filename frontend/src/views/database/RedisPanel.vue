@@ -1,20 +1,16 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, h } from 'vue'
-import { useMessage } from 'naive-ui'
-import {
-  NButton, NSpace, NIcon, NTabs, NTabPane, NInput, NInputNumber,
-  NSelect, NRadioGroup, NRadio, NEmpty, NSpin, NAlert, NTag,
-  NProgress, NFormItem, NCheckbox, NModal
-} from 'naive-ui'
+import { useI18n } from 'vue-i18n'
+import { useMessage } from '@/composables/useMessage'
+import { NButton, NSpace, NIcon, NTabs, NTabPane, NInput, NInputNumber, NSelect, NEmpty, NSpin, NAlert, NProgress, NFormItem, NModal } from 'naive-ui'
 import type { DataTableColumns } from 'naive-ui'
 import {
   SearchOutline, RefreshOutline, AddOutline, TrashOutline,
   SaveOutline, TerminalOutline, HardwareChipOutline, KeyOutline,
   ChevronForwardOutline, ChevronBackOutline, CloseOutline, TimerOutline
 } from '@vicons/ionicons5'
-import {
-  PageCard, DataTable, ModalForm, StatusTag, ConfirmDialog, CodeEditor, StatCard
-} from '@/components'
+import { DataTable, ModalForm, StatusTag, ConfirmDialog, CodeEditor, StatCard } from '@/components'
+import { formatBytes as formatBytesUtil } from '@/utils/format'
 import type { StatusType } from '@/components'
 import * as redisApi from '@/api/redis'
 import type {
@@ -26,6 +22,7 @@ const props = defineProps<{
 }>()
 
 const message = useMessage()
+const { t } = useI18n()
 
 /* ==================== 辅助函数 ==================== */
 
@@ -33,21 +30,7 @@ function monoEl(text: any) {
   return h('span', { class: 'mono' }, String(text ?? '-'))
 }
 
-function iconBtn(opts: { text: string; icon: any; onClick: () => void; type?: string }) {
-  return h(NButton, {
-    size: 'tiny',
-    quaternary: true,
-    type: (opts.type || 'default') as any,
-    onClick: opts.onClick
-  }, {
-    icon: () => h(NIcon, null, { default: () => h(opts.icon) }),
-    default: () => opts.text
-  })
-}
 
-function btnGroup(children: any[]) {
-  return h(NSpace, { size: 4 }, { default: () => children })
-}
 
 const keyTypeStatusMap: Record<RedisKeyType, StatusType> = {
   string: 'running',
@@ -60,14 +43,12 @@ const keyTypeStatusMap: Record<RedisKeyType, StatusType> = {
 
 function formatBytes(bytes?: number): string {
   if (bytes === undefined || bytes === null) return '-'
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
+  return formatBytesUtil(bytes)
 }
 
 function formatTTL(ttl: number): string {
-  if (ttl === -1) return '永久'
-  if (ttl === -2) return '不存在'
+  if (ttl === -1) return t('database.redis.ttlPermanent')
+  if (ttl === -2) return t('database.redis.ttlNotExist')
   if (ttl < 60) return `${ttl}s`
   if (ttl < 3600) return `${Math.floor(ttl / 60)}m ${ttl % 60}s`
   return `${Math.floor(ttl / 3600)}h ${Math.floor((ttl % 3600) / 60)}m`
@@ -118,7 +99,7 @@ async function loadKeys() {
     hasMoreKeys.value = res.data.cursor !== 0
     totalKeys.value = res.data.total ?? 0
   } catch (e: any) {
-    message.error(e.message || '加载 Key 列表失败')
+    message.error(e.message || t('database.redis.loadKeysFailed'))
   } finally {
     keyListLoading.value = false
   }
@@ -144,7 +125,7 @@ function prevPage() {
   loadKeys()
 }
 
-const keyColumns: DataTableColumns = [
+const keyColumns = computed<DataTableColumns>(() => [
   {
     title: 'Key', key: 'key',
     render: (row: any) => h(NButton, {
@@ -159,15 +140,15 @@ const keyColumns: DataTableColumns = [
     })
   },
   {
-    title: '类型', key: 'type', width: 100,
+    title: t('database.redis.columns.type'), key: 'type', width: 100,
     render: (row: any) => h(StatusTag, {
       status: keyTypeStatusMap[row.type as RedisKeyType] || 'stopped',
       text: row.type?.toUpperCase()
     })
   },
   { title: 'TTL', key: 'ttl', width: 100, render: (row: any) => formatTTL(row.ttl) },
-  { title: '大小', key: 'size', width: 100, render: (row: any) => formatBytes(row.size) }
-]
+  { title: t('database.redis.columns.size'), key: 'size', width: 100, render: (row: any) => formatBytes(row.size) }
+])
 
 async function selectKey(key: string) {
   selectedKeyLoading.value = true
@@ -190,7 +171,7 @@ async function selectKey(key: string) {
       editZSetItems.value = (res.data.value as Array<{ member: string; score: number }>) || []
     }
   } catch (e: any) {
-    message.error(e.message || '加载 Key 详情失败')
+    message.error(e.message || t('database.redis.loadKeyDetailFailed'))
   } finally {
     selectedKeyLoading.value = false
   }
@@ -222,12 +203,12 @@ async function saveKey() {
       value,
       ttl: editTTL.value ?? undefined
     })
-    message.success('保存成功')
+    message.success(t('database.redis.saveSuccess'))
     keyDetailDirty.value = false
     selectKey(selectedKey.value.key)
     loadKeys()
   } catch (e: any) {
-    message.error(e.message || '保存失败')
+    message.error(e.message || t('database.redis.saveFailed'))
   }
 }
 
@@ -316,14 +297,14 @@ async function doDeleteKey() {
   deleteKeyLoading.value = true
   try {
     await redisApi.deleteKey(props.instanceId, targetKeyName.value)
-    message.success(`Key ${targetKeyName.value} 已删除`)
+    message.success(t('database.redis.keyDeleted', { name: targetKeyName.value }))
     deleteKeyConfirm.value = false
     if (selectedKey.value?.key === targetKeyName.value) {
       selectedKey.value = null
     }
     loadKeys()
   } catch (e: any) {
-    message.error(e.message || '删除失败')
+    message.error(e.message || t('database.redis.deleteFailed'))
   } finally {
     deleteKeyLoading.value = false
   }
@@ -344,17 +325,17 @@ function openExpireKey(key: string) {
 async function submitExpireKey() {
   if (!expireForm.key) return
   if (!Number.isFinite(expireForm.ttl) || expireForm.ttl <= 0) {
-    message.warning('TTL 必须为正整数（秒），-1 表示永久')
+    message.warning(t('database.redis.ttlInvalid'))
     return
   }
   expireKeyLoading.value = true
   try {
     await redisApi.expireKey(props.instanceId, expireForm.key, expireForm.ttl)
-    message.success(expireForm.ttl < 0 ? `Key ${expireForm.key} 已设为永久` : `Key ${expireForm.key} 将在 ${expireForm.ttl} 秒后过期`)
+    message.success(expireForm.ttl < 0 ? t('database.redis.keySetPermanent', { name: expireForm.key }) : t('database.redis.keyWillExpire', { name: expireForm.key, seconds: expireForm.ttl }))
     expireKeyModal.value = false
     loadKeys()
   } catch (e: any) {
-    message.error(e.message || '设置过期时间失败')
+    message.error(e.message || t('database.redis.expireFailed'))
   } finally {
     expireKeyLoading.value = false
   }
@@ -385,7 +366,7 @@ function openAddKey() {
 }
 
 async function submitAddKey() {
-  if (!addKeyForm.value.key) { message.warning('请输入 Key 名'); return }
+  if (!addKeyForm.value.key) { message.warning(t('database.redis.enterKeyName')); return }
   addKeyLoading.value = true
   try {
     let value: any = addKeyForm.value.value
@@ -409,11 +390,11 @@ async function submitAddKey() {
       value,
       ttl: addKeyForm.value.ttl ?? undefined
     })
-    message.success('Key 创建成功')
+    message.success(t('database.redis.keyCreated'))
     addKeyModal.value = false
     loadKeys()
   } catch (e: any) {
-    message.error(e.message || '创建失败')
+    message.error(e.message || t('database.redis.createFailed'))
   } finally {
     addKeyLoading.value = false
   }
@@ -430,7 +411,7 @@ const quickCommands = ['INFO', 'DBSIZE', 'KEYS *', 'CLIENT LIST', 'CONFIG GET ma
 
 async function runCLI(cmd?: string) {
   const command = (cmd ?? cliCommand.value).trim()
-  if (!command) { message.warning('请输入命令'); return }
+  if (!command) { message.warning(t('database.redis.enterCommand')); return }
   cliLoading.value = true
   try {
     const res = await redisApi.execCLI(props.instanceId, command)
@@ -444,7 +425,7 @@ async function runCLI(cmd?: string) {
     }
   } catch (e: any) {
     cliResult.value = `ERROR: ${e.message}`
-    message.error(e.message || '执行失败')
+    message.error(e.message || t('database.redis.execFailed'))
   } finally {
     cliLoading.value = false
   }
@@ -459,7 +440,7 @@ function useHistoryCommand(cmd: string) {
 const memoryInfo = ref<RedisMemoryInfo | null>(null)
 const memoryLoading = ref(false)
 const bigKeys = ref<RedisBigKey[]>([])
-const bigKeysLoading = ref(false)
+
 const infoContent = ref('')
 const infoLoading = ref(false)
 const showInfo = ref(false)
@@ -470,7 +451,7 @@ async function loadMemory() {
     const res = await redisApi.getMemory(props.instanceId)
     memoryInfo.value = res.data
   } catch (e: any) {
-    message.error(e.message || '加载内存信息失败')
+    message.error(e.message || t('database.redis.loadMemoryFailed'))
   } finally {
     memoryLoading.value = false
   }
@@ -486,7 +467,7 @@ async function loadInfo() {
       infoContent.value = JSON.stringify(res.data, null, 2)
     }
   } catch (e: any) {
-    infoContent.value = `加载失败: ${e.message}`
+    infoContent.value = t('database.redis.loadInfoFailed', { message: e.message })
   } finally {
     infoLoading.value = false
   }
@@ -497,21 +478,21 @@ const memoryUsagePercent = computed(() => {
   return Math.round((memoryInfo.value.used_memory / memoryInfo.value.maxmemory) * 100)
 })
 
-const bigKeyColumns: DataTableColumns = [
+const bigKeyColumns = computed<DataTableColumns>(() => [
   { title: 'Key', key: 'key', render: (row: any) => monoEl(row.key) },
   {
-    title: '类型', key: 'type', width: 100,
+    title: t('database.redis.columns.type'), key: 'type', width: 100,
     render: (row: any) => h(StatusTag, {
       status: keyTypeStatusMap[row.type as RedisKeyType] || 'stopped',
       text: row.type?.toUpperCase()
     })
   },
-  { title: '大小', key: 'size_human', width: 120 },
+  { title: t('database.redis.columns.size'), key: 'size_human', width: 120 },
   {
-    title: '占比', key: 'ratio', width: 120,
+    title: t('database.redis.columns.ratio'), key: 'ratio', width: 120,
     render: (row: any) => row.ratio !== undefined ? `${row.ratio.toFixed(1)}%` : '-'
   }
-]
+])
 
 function toggleInfo() {
   showInfo.value = !showInfo.value
@@ -530,25 +511,25 @@ onMounted(() => {
 <template>
   <NTabs v-model:value="activeSubTab" type="line" animated>
     <!-- ==================== Tab 1: Key 浏览器 ==================== -->
-    <NTabPane name="keys" tab="Key 浏览器">
+    <NTabPane name="keys" :tab="t('database.redis.tabs.keyBrowser')">
       <div class="tab-toolbar">
         <NSpace>
           <NInput
             v-model:value="searchPattern"
-            placeholder="pattern，支持 * 通配，如 user:*"
+            :placeholder="t('database.redis.searchPlaceholder')"
             style="width: var(--input-3xl)"
             @keyup.enter="searchKeys"
           >
             <template #prefix><NIcon :size="16"><SearchOutline /></NIcon></template>
           </NInput>
           <NButton type="primary" @click="searchKeys" :loading="keyListLoading">
-            <template #icon><NIcon><SearchOutline /></NIcon></template>搜索
+            <template #icon><NIcon><SearchOutline /></NIcon></template>{{ t('database.redis.search') }}
           </NButton>
           <NButton @click="loadKeys" :loading="keyListLoading">
-            <template #icon><NIcon><RefreshOutline /></NIcon></template>刷新
+            <template #icon><NIcon><RefreshOutline /></NIcon></template>{{ t('database.common.refresh') }}
           </NButton>
           <NButton type="primary" @click="openAddKey">
-            <template #icon><NIcon><AddOutline /></NIcon></template>添加 Key
+            <template #icon><NIcon><AddOutline /></NIcon></template>{{ t('database.redis.addKey') }}
           </NButton>
         </NSpace>
       </div>
@@ -566,18 +547,18 @@ onMounted(() => {
             />
           </NSpin>
           <div v-if="keyList.length === 0 && !keyListLoading" class="empty-hint">
-            <NEmpty description="暂无 Key" />
+            <NEmpty :description="t('database.redis.noKeys')" />
           </div>
           <div class="redis-pagination">
             <NSpace>
               <NButton size="tiny" :disabled="scanCursorStack.length === 0" @click="prevPage">
-                <template #icon><NIcon><ChevronBackOutline /></NIcon></template>上一页
+                <template #icon><NIcon><ChevronBackOutline /></NIcon></template>{{ t('database.redis.prevPage') }}
               </NButton>
               <span class="mono redis-pagination__info">cursor: {{ scanCursor }}</span>
               <NButton size="tiny" :disabled="!hasMoreKeys" @click="nextPage">
-                下一页<template #icon><NIcon><ChevronForwardOutline /></NIcon></template>
+                {{ t('database.redis.nextPage') }}<template #icon><NIcon><ChevronForwardOutline /></NIcon></template>
               </NButton>
-              <span v-if="totalKeys > 0" class="mono redis-pagination__total">共 {{ totalKeys }} 个 Key</span>
+              <span v-if="totalKeys > 0" class="mono redis-pagination__total">{{ t('database.redis.totalKeys', { count: totalKeys }) }}</span>
             </NSpace>
           </div>
         </div>
@@ -585,7 +566,7 @@ onMounted(() => {
         <!-- 右侧 Key 详情 -->
         <div class="redis-detail">
           <div v-if="!selectedKey" class="empty-hint">
-            <NEmpty description="点击左侧 Key 查看详情" />
+            <NEmpty :description="t('database.redis.selectKeyHint')" />
           </div>
 
           <template v-else>
@@ -604,10 +585,10 @@ onMounted(() => {
                     <template #icon><NIcon><TimerOutline /></NIcon></template>TTL
                   </NButton>
                   <NButton size="tiny" type="primary" :loading="false" @click="saveKey" :disabled="!keyDetailDirty">
-                    <template #icon><NIcon><SaveOutline /></NIcon></template>保存
+                    <template #icon><NIcon><SaveOutline /></NIcon></template>{{ t('database.redis.save') }}
                   </NButton>
                   <NButton size="tiny" type="error" @click="confirmDeleteKey(selectedKey.key)">
-                    <template #icon><NIcon><TrashOutline /></NIcon></template>删除
+                    <template #icon><NIcon><TrashOutline /></NIcon></template>{{ t('database.common.delete') }}
                   </NButton>
                 </NSpace>
               </div>
@@ -615,16 +596,16 @@ onMounted(() => {
               <div class="redis-detail__meta">
                 <NSpace>
                   <span class="mono">TTL: {{ formatTTL(selectedKey.ttl) }}</span>
-                  <span class="mono">大小: {{ formatBytes(selectedKey.size) }}</span>
+                  <span class="mono">{{ t('database.redis.metaSize', { size: formatBytes(selectedKey.size) }) }}</span>
                 </NSpace>
               </div>
 
               <!-- TTL 设置 -->
               <div class="redis-detail__section">
-                <span class="redis-detail__label">TTL（秒，-1 为永久）</span>
+                <span class="redis-detail__label">{{ t('database.redis.ttlLabel') }}</span>
                 <NInputNumber
                   v-model:value="editTTL"
-                  placeholder="-1 永久"
+                  :placeholder="t('database.redis.ttlPlaceholder')"
                   :min="-1"
                   style="width: var(--input-md)"
                   @update:value="markDirty"
@@ -633,12 +614,12 @@ onMounted(() => {
 
               <!-- String 编辑器 -->
               <div v-if="selectedKey.type === 'string'" class="redis-detail__section">
-                <span class="redis-detail__label">值</span>
+                <span class="redis-detail__label">{{ t('database.redis.valueLabel') }}</span>
                 <NInput
                   v-model:value="editStringValue"
                   type="textarea"
                   :rows="6"
-                  placeholder="字符串值"
+                  :placeholder="t('database.redis.stringValuePlaceholder')"
                   @update:value="markDirty"
                   style="font-family: var(--font-mono)"
                 />
@@ -647,9 +628,9 @@ onMounted(() => {
               <!-- Hash 编辑器 -->
               <div v-else-if="selectedKey.type === 'hash'" class="redis-detail__section">
                 <div class="redis-detail__section-header">
-                  <span class="redis-detail__label">字段 (Field / Value)</span>
+                  <span class="redis-detail__label">{{ t('database.redis.hashFieldsLabel') }}</span>
                   <NButton size="tiny" @click="addHashPair">
-                    <template #icon><NIcon><AddOutline /></NIcon></template>添加字段
+                    <template #icon><NIcon><AddOutline /></NIcon></template>{{ t('database.redis.addHashField') }}
                   </NButton>
                 </div>
                 <div class="hash-editor">
@@ -661,7 +642,7 @@ onMounted(() => {
                     </NButton>
                   </div>
                   <div v-if="editHashPairs.length === 0" class="empty-hint">
-                    <NEmpty description="暂无字段" />
+                    <NEmpty :description="t('database.redis.noHashFields')" />
                   </div>
                 </div>
               </div>
@@ -669,15 +650,15 @@ onMounted(() => {
               <!-- List 编辑器 -->
               <div v-else-if="selectedKey.type === 'list'" class="redis-detail__section">
                 <div class="redis-detail__section-header">
-                  <span class="redis-detail__label">列表项</span>
+                  <span class="redis-detail__label">{{ t('database.redis.listItemsLabel') }}</span>
                   <NSpace>
-                    <NInput v-model:value="newListItem" placeholder="新元素" size="small" style="width: var(--input-lg)" @keyup.enter="lpushItem" />
+                    <NInput v-model:value="newListItem" :placeholder="t('database.redis.newElementPlaceholder')" size="small" style="width: var(--input-lg)" @keyup.enter="lpushItem" />
                     <NButton size="tiny" @click="lpushItem">LPUSH</NButton>
                     <NButton size="tiny" @click="rpushItem">RPUSH</NButton>
                   </NSpace>
                 </div>
                 <div class="list-editor">
-                  <div v-for="(item, idx) in editListItems" :key="idx" class="list-editor__row">
+                  <div v-for="(_item, idx) in editListItems" :key="idx" class="list-editor__row">
                     <span class="mono list-editor__index">[{{ idx }}]</span>
                     <NInput v-model:value="editListItems[idx]" size="small" @update:value="markDirty" />
                     <NButton size="tiny" type="error" quaternary @click="removeListItem(idx)">
@@ -685,7 +666,7 @@ onMounted(() => {
                     </NButton>
                   </div>
                   <div v-if="editListItems.length === 0" class="empty-hint">
-                    <NEmpty description="列表为空" />
+                    <NEmpty :description="t('database.redis.emptyList')" />
                   </div>
                 </div>
               </div>
@@ -693,23 +674,23 @@ onMounted(() => {
               <!-- Set 编辑器 -->
               <div v-else-if="selectedKey.type === 'set'" class="redis-detail__section">
                 <div class="redis-detail__section-header">
-                  <span class="redis-detail__label">成员</span>
+                  <span class="redis-detail__label">{{ t('database.redis.setMembersLabel') }}</span>
                   <NSpace>
-                    <NInput v-model:value="newSetMember" placeholder="新成员" size="small" style="width: var(--input-lg)" @keyup.enter="addSetMember" />
+                    <NInput v-model:value="newSetMember" :placeholder="t('database.redis.newMemberPlaceholder')" size="small" style="width: var(--input-lg)" @keyup.enter="addSetMember" />
                     <NButton size="tiny" @click="addSetMember">
-                      <template #icon><NIcon><AddOutline /></NIcon></template>添加
+                      <template #icon><NIcon><AddOutline /></NIcon></template>{{ t('database.redis.add') }}
                     </NButton>
                   </NSpace>
                 </div>
                 <div class="set-editor">
-                  <div v-for="(member, idx) in editSetMembers" :key="idx" class="set-editor__row">
+                  <div v-for="(_member, idx) in editSetMembers" :key="idx" class="set-editor__row">
                     <NInput v-model:value="editSetMembers[idx]" size="small" @update:value="markDirty" />
                     <NButton size="tiny" type="error" quaternary @click="removeSetMember(idx)">
                       <template #icon><NIcon><TrashOutline /></NIcon></template>
                     </NButton>
                   </div>
                   <div v-if="editSetMembers.length === 0" class="empty-hint">
-                    <NEmpty description="集合为空" />
+                    <NEmpty :description="t('database.redis.emptySet')" />
                   </div>
                 </div>
               </div>
@@ -717,12 +698,12 @@ onMounted(() => {
               <!-- ZSet 编辑器 -->
               <div v-else-if="selectedKey.type === 'zset'" class="redis-detail__section">
                 <div class="redis-detail__section-header">
-                  <span class="redis-detail__label">成员 / 分数</span>
+                  <span class="redis-detail__label">{{ t('database.redis.zsetMembersLabel') }}</span>
                   <NSpace>
-                    <NInput v-model:value="newZSetMember" placeholder="成员" size="small" style="width: var(--input-md)" />
+                    <NInput v-model:value="newZSetMember" :placeholder="t('database.redis.memberPlaceholder')" size="small" style="width: var(--input-md)" />
                     <NInputNumber v-model:value="newZSetScore" size="small" style="width: var(--input-sm)" />
                     <NButton size="tiny" @click="addZSetItem">
-                      <template #icon><NIcon><AddOutline /></NIcon></template>添加
+                      <template #icon><NIcon><AddOutline /></NIcon></template>{{ t('database.redis.add') }}
                     </NButton>
                   </NSpace>
                 </div>
@@ -735,7 +716,7 @@ onMounted(() => {
                     </NButton>
                   </div>
                   <div v-if="editZSetItems.length === 0" class="empty-hint">
-                    <NEmpty description="有序集合为空" />
+                    <NEmpty :description="t('database.redis.emptyZSet')" />
                   </div>
                 </div>
               </div>
@@ -751,20 +732,20 @@ onMounted(() => {
         <NSpace>
           <NSelect
             v-model:value="cliCommand"
-            placeholder="历史命令"
+            :placeholder="t('database.redis.historyPlaceholder')"
             :options="cliHistory.map(c => ({ label: c, value: c }))"
             style="width: var(--input-3xl)"
             @update:value="useHistoryCommand"
           />
           <NButton type="primary" :loading="cliLoading" @click="runCLI()">
-            <template #icon><NIcon><TerminalOutline /></NIcon></template>执行
+            <template #icon><NIcon><TerminalOutline /></NIcon></template>{{ t('database.redis.execute') }}
           </NButton>
         </NSpace>
       </div>
 
       <div class="cli-quick">
         <NSpace>
-          <span class="cli-quick__label">快捷命令:</span>
+          <span class="cli-quick__label">{{ t('database.redis.quickCommands') }}</span>
           <NButton
             v-for="cmd in quickCommands"
             :key="cmd"
@@ -789,37 +770,37 @@ onMounted(() => {
       <div class="cli-result">
         <div class="cli-result__header">
           <NIcon :size="14"><TerminalOutline /></NIcon>
-          <span>输出</span>
+          <span>{{ t('database.redis.output') }}</span>
         </div>
-        <pre class="cli-result__output">{{ cliResult || '(等待执行...)' }}</pre>
+        <pre class="cli-result__output">{{ cliResult || t('database.redis.waitingExecute') }}</pre>
       </div>
     </NTabPane>
 
     <!-- ==================== Tab 3: 内存分析 ==================== -->
-    <NTabPane name="memory" tab="内存分析">
+    <NTabPane name="memory" :tab="t('database.redis.tabs.memory')">
       <div class="tab-toolbar">
         <NSpace>
           <NButton type="primary" @click="loadMemory" :loading="memoryLoading">
-            <template #icon><NIcon><RefreshOutline /></NIcon></template>刷新
+            <template #icon><NIcon><RefreshOutline /></NIcon></template>{{ t('database.common.refresh') }}
           </NButton>
           <NButton @click="toggleInfo">
-            <template #icon><NIcon><HardwareChipOutline /></NIcon></template>{{ showInfo ? '隐藏' : '查看' }} INFO
+            <template #icon><NIcon><HardwareChipOutline /></NIcon></template>{{ showInfo ? t('database.redis.hide') : t('database.redis.show') }} INFO
           </NButton>
         </NSpace>
       </div>
 
       <NSpin :show="memoryLoading">
         <div class="stat-row" v-if="memoryInfo">
-          <StatCard title="已用内存" :value="memoryInfo.used_memory_human" accent="acc" />
-          <StatCard title="最大内存" :value="memoryInfo.maxmemory_human" accent="info" />
-          <StatCard title="Key 数量" :value="memoryInfo.total_keys ?? '-'" accent="acc2" />
-          <StatCard title="内存策略" :value="memoryInfo.maxmemory_policy" accent="warn" />
+          <StatCard :title="t('database.redis.stats.usedMemory')" :value="memoryInfo.used_memory_human" accent="acc" />
+          <StatCard :title="t('database.redis.stats.maxMemory')" :value="memoryInfo.maxmemory_human" accent="info" />
+          <StatCard :title="t('database.redis.stats.keyCount')" :value="memoryInfo.total_keys ?? '-'" accent="acc2" />
+          <StatCard :title="t('database.redis.stats.memoryPolicy')" :value="memoryInfo.maxmemory_policy" accent="warn" />
         </div>
       </NSpin>
 
       <div v-if="memoryInfo && memoryInfo.maxmemory > 0" class="memory-progress">
         <div class="memory-progress__label">
-          <span>内存使用率</span>
+          <span>{{ t('database.redis.memoryUsage') }}</span>
           <span class="mono">{{ memoryUsagePercent }}%</span>
         </div>
         <NProgress
@@ -832,20 +813,20 @@ onMounted(() => {
 
       <div v-if="memoryInfo?.mem_fragmentation_ratio" class="memory-frag">
         <NAlert type="info" :show-icon="true">
-          内存碎片率: <span class="mono">{{ memoryInfo.mem_fragmentation_ratio }}</span>
+          {{ t('database.redis.fragmentationRatio') }}: <span class="mono">{{ memoryInfo.mem_fragmentation_ratio }}</span>
         </NAlert>
       </div>
 
       <!-- 大 Key 排行 -->
       <div class="bigkeys-section" v-if="bigKeys.length > 0">
-        <div class="bigkeys-section__title">大 Key 排行</div>
+        <div class="bigkeys-section__title">{{ t('database.redis.bigKeysTitle') }}</div>
         <DataTable :columns="bigKeyColumns" :data="bigKeys" :pagination="false" size="small" />
       </div>
 
       <!-- INFO 全量信息 -->
       <div v-if="showInfo" class="info-section">
         <div class="info-section__header">
-          <span>INFO 全量信息</span>
+          <span>{{ t('database.redis.infoFull') }}</span>
           <NButton size="tiny" text @click="showInfo = false">
             <template #icon><NIcon><CloseOutline /></NIcon></template>
           </NButton>
@@ -862,7 +843,7 @@ onMounted(() => {
       </div>
 
       <div v-if="!memoryInfo && !memoryLoading" class="empty-hint">
-        <NEmpty description="点击刷新加载内存信息" />
+        <NEmpty :description="t('database.redis.loadMemoryHint')" />
       </div>
     </NTabPane>
   </NTabs>
@@ -872,56 +853,56 @@ onMounted(() => {
   <!-- 添加 Key -->
   <ModalForm
     v-model:show="addKeyModal"
-    title="添加 Key"
+    :title="t('database.redis.addKey')"
     :loading="addKeyLoading"
     @submit="submitAddKey"
   >
-    <NFormItem label="类型">
+    <NFormItem :label="t('database.redis.form.type')">
       <NSelect v-model:value="addKeyForm.type" :options="addKeyTypeOptions" />
     </NFormItem>
-    <NFormItem label="Key 名">
-      <NInput v-model:value="addKeyForm.key" placeholder="例如: user:1" />
+    <NFormItem :label="t('database.redis.form.keyName')">
+      <NInput v-model:value="addKeyForm.key" :placeholder="t('database.redis.form.keyNamePlaceholder')" />
     </NFormItem>
-    <NFormItem label="值">
+    <NFormItem :label="t('database.redis.form.value')">
       <NInput
         v-model:value="addKeyForm.value"
         type="textarea"
         :rows="4"
-        :placeholder="addKeyForm.type === 'string' ? '字符串值' : addKeyForm.type === 'hash' ? 'field1=value1,field2=value2' : addKeyForm.type === 'zset' ? 'member1:1.0,member2:2.0' : 'item1,item2,item3'"
+        :placeholder="addKeyForm.type === 'string' ? t('database.redis.stringValuePlaceholder') : addKeyForm.type === 'hash' ? 'field1=value1,field2=value2' : addKeyForm.type === 'zset' ? 'member1:1.0,member2:2.0' : 'item1,item2,item3'"
         style="font-family: var(--font-mono)"
       />
     </NFormItem>
-    <NFormItem label="TTL（秒）">
-      <NInputNumber v-model:value="addKeyForm.ttl" placeholder="留空为永久" :min="-1" style="width: 100%" />
+    <NFormItem :label="t('database.redis.form.ttl')">
+      <NInputNumber v-model:value="addKeyForm.ttl" :placeholder="t('database.redis.form.ttlEmptyPlaceholder')" :min="-1" style="width: 100%" />
     </NFormItem>
   </ModalForm>
 
   <!-- 删除 Key 确认 -->
   <ConfirmDialog
     v-model:show="deleteKeyConfirm"
-    title="删除 Key"
-    :content="`确定要删除 Key「${targetKeyName}」吗？此操作不可恢复。`"
+    :title="t('database.redis.deleteKeyTitle')"
+    :content="t('database.redis.deleteKeyContent', { name: targetKeyName })"
     type="error"
-    confirm-text="删除"
+    :confirm-text="t('database.common.delete')"
     :loading="deleteKeyLoading"
     @confirm="doDeleteKey"
   />
 
   <!-- 设置 Key 过期时间 -->
-  <NModal v-model:show="expireKeyModal" preset="card" title="设置 Key 过期时间" :style="{ width: 'min(420px, 92vw)' }">
+  <ModalForm
+    v-model:show="expireKeyModal"
+    :title="t('database.redis.expireModalTitle')"
+    :width="420"
+    :loading="expireKeyLoading"
+    @submit="submitExpireKey"
+  >
     <NFormItem label="Key">
       <NInput :value="expireForm.key" disabled />
     </NFormItem>
-    <NFormItem label="TTL（秒）">
-      <NInputNumber v-model:value="expireForm.ttl" :min="-1" style="width: 100%;" placeholder="秒数，-1 表示永久" />
+    <NFormItem :label="t('database.redis.form.ttl')">
+      <NInputNumber v-model:value="expireForm.ttl" :min="-1" style="width: 100%;" :placeholder="t('database.redis.expireTtlPlaceholder')" />
     </NFormItem>
-    <template #footer>
-      <NSpace justify="end">
-        <NButton @click="expireKeyModal = false">取消</NButton>
-        <NButton type="primary" :loading="expireKeyLoading" @click="submitExpireKey">确定</NButton>
-      </NSpace>
-    </template>
-  </NModal>
+  </ModalForm>
 </template>
 
 <style scoped>
@@ -960,7 +941,7 @@ onMounted(() => {
 .redis-pagination__info,
 .redis-pagination__total {
   font-size: var(--fs-caption);
-  color: var(--faint);
+  color: var(--text-quaternary);
 }
 
 .redis-detail {
@@ -1010,7 +991,7 @@ onMounted(() => {
 .redis-detail__meta {
   margin-bottom: var(--space-4);
   font-size: var(--fs-caption);
-  color: var(--faint);
+  color: var(--text-quaternary);
 }
 
 .redis-detail__section {
@@ -1054,7 +1035,7 @@ onMounted(() => {
   width: 40px;
   flex-shrink: 0;
   font-size: var(--fs-caption);
-  color: var(--faint);
+  color: var(--text-quaternary);
 }
 
 .list-editor__row .n-input {
@@ -1068,7 +1049,7 @@ onMounted(() => {
 
 .cli-quick__label {
   font-size: var(--fs-caption);
-  color: var(--faint);
+  color: var(--text-quaternary);
 }
 
 .cli-editor {

@@ -118,6 +118,44 @@ func (s *Service) ApplyLetsEncrypt(siteID uint, email string) (*model.Site, stri
 	return site, status, nil
 }
 
+// RemoveSSL 禁用站点 SSL：清除证书状态、删除证书文件并重写 nginx 配置。
+//
+// 这是真实可执行的操作（与 ApplyLetsEncrypt 的 MVP 模拟不同）。
+func (s *Service) RemoveSSL(siteID uint) (*model.Site, error) {
+	site, err := s.GetSite(siteID)
+	if err != nil {
+		return nil, err
+	}
+
+	// 删除证书文件（路径可能为空）
+	for _, p := range []string{site.SSLCertPath, site.SSLKeyPath} {
+		if p != "" {
+			os.Remove(p)
+		}
+	}
+	if certDir := sslCertDir(site.PrimaryDomain); certDir != "" {
+		os.RemoveAll(certDir)
+	}
+
+	site.SSLEnabled = false
+	site.SSLProvider = ""
+	site.SSLCertPath = ""
+	site.SSLKeyPath = ""
+	site.SSLAutoRenew = false
+	site.SSLExpireAt = nil
+	if err := s.db.Save(site).Error; err != nil {
+		return nil, fmt.Errorf("save site: %w", err)
+	}
+
+	// 重写 nginx 配置（去掉证书相关配置）
+	if site.NginxConf != "" {
+		if confContent, err := nginx.Generate(site); err == nil {
+			os.WriteFile(site.NginxConf, []byte(confContent), 0644)
+		}
+	}
+	return site, nil
+}
+
 // GetSSLInfo 获取 SSL 证书信息
 func (s *Service) GetSSLInfo(siteID uint) (*dto.SiteSSLInfo, error) {
 	site, err := s.GetSite(siteID)

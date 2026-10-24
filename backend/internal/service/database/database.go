@@ -147,10 +147,22 @@ func (s *DatabaseService) GetTableStructure(instanceID uint, dbName, tableName s
 	}
 	defer descRows.Close()
 
+	// DESCRIBE 的列数理论上也可能随版本变化，按实际列数动态 Scan
+	descCols, err := descRows.Columns()
+	if err != nil {
+		return nil, err
+	}
+
 	for descRows.Next() {
 		var col dto.TableColumn
 		var defaultVal sql.NullString
-		if err := descRows.Scan(&col.Field, &col.Type, &col.Null, &col.Key, &defaultVal, &col.Extra); err != nil {
+		targets := []interface{}{
+			&col.Field, &col.Type, &col.Null, &col.Key, &defaultVal, &col.Extra,
+		}
+		for len(targets) < len(descCols) {
+			targets = append(targets, new(sql.NullString))
+		}
+		if err := descRows.Scan(targets...); err != nil {
 			return nil, err
 		}
 		if defaultVal.Valid {
@@ -169,14 +181,20 @@ func (s *DatabaseService) GetTableStructure(instanceID uint, dbName, tableName s
 	}
 	defer idxRows.Close()
 
+	// SHOW INDEX 的列数随 MySQL 版本变化：5.7 是 13 列，8.0 增加
+	// Visible、Expression 两列共 15 列。写死列数会让 8.0 上报
+	// 「expected 15 destination arguments in Scan, not 13」，
+	// 导致「表结构」页面 100% 报错。这里按实际列数动态 Scan。
+	idxCols, err := idxRows.Columns()
+	if err != nil {
+		return nil, err
+	}
+
 	for idxRows.Next() {
 		var idx dto.TableIndex
 		var subPart, packed sql.NullString
-		if err := idxRows.Scan(
-			&idx.Table, &idx.NonUnique, &idx.KeyName, &idx.SeqInIndex,
-			&idx.ColumnName, &idx.Collation, &idx.Cardinality, &subPart,
-			&packed, &idx.Null, &idx.IndexType, &idx.Comment, &idx.IndexComment,
-		); err != nil {
+		targets := buildIndexScanTargets(&idx, &subPart, &packed, len(idxCols))
+		if err := idxRows.Scan(targets...); err != nil {
 			return nil, err
 		}
 		if subPart.Valid {
@@ -188,6 +206,26 @@ func (s *DatabaseService) GetTableStructure(instanceID uint, dbName, tableName s
 		result.Indexes = append(result.Indexes, idx)
 	}
 	return result, idxRows.Err()
+}
+
+// buildIndexScanTargets 生成 SHOW INDEX 的 Scan 目标列表。
+//
+// SHOW INDEX 的列数随 MySQL 版本变化：5.7 是 13 列，8.0 增加 Visible、
+// Expression 两列共 15 列。写死列数会让 8.0 上报
+// 「expected 15 destination arguments in Scan, not 13」，
+// 导致「表结构」页面 100% 报错。这里按实际列数动态补齐目标。
+func buildIndexScanTargets(idx *dto.TableIndex, subPart, packed *sql.NullString, colCount int) []interface{} {
+	// 前 13 列为各版本共有，顺序固定
+	targets := []interface{}{
+		&idx.Table, &idx.NonUnique, &idx.KeyName, &idx.SeqInIndex,
+		&idx.ColumnName, &idx.Collation, &idx.Cardinality, subPart,
+		packed, &idx.Null, &idx.IndexType, &idx.Comment, &idx.IndexComment,
+	}
+	// 版本新增列用通用类型接收后忽略
+	for len(targets) < colCount {
+		targets = append(targets, new(sql.NullString))
+	}
+	return targets
 }
 
 // ListTableData 分页查询表数据

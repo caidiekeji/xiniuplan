@@ -336,28 +336,24 @@
 
 ## 图标规范
 
-- **图标库**：使用 `@vicons/ionicons5`（Ionicons 5）
-- **图标尺寸**：菜单 18px，按钮 16px，卡片标题 20px，空状态 64px
-- **图标颜色**：继承文字颜色，状态图标使用对应功能色
-- **图标与文字间距**：8px
-- **常用图标映射**：
+- **双体系决策表（审计 D05）**：项目并存两套图标，边界如下，新图标必须归入其一，不得再造第三套。
 
-| 功能 | 图标 |
-|------|------|
-| 仪表盘 | `SpeedometerOutline` |
-| 网站 | `GlobeOutline` |
-| 数据库 | `ServerOutline` |
-| 文件 | `FolderOpenOutline` |
-| 终端 | `TerminalOutline` |
-| 容器 | `CubeOutline` |
-| 应用商店 | `AppstoreOutline` |
-| 备份 | `CloudUploadOutline` |
-| 计划任务 | `TimeOutline` |
-| 防火墙 | `ShieldCheckmarkOutline` |
-| SSH | `KeyOutline` |
-| 告警 | `NotificationsOutline` |
-| 用户 | `PeopleOutline` |
-| 设置 | `SettingsOutline` |
+| 体系 | 位置 | 规格 | 适用范围 |
+|------|------|------|----------|
+| 专属集 `PanelIcons.ts` | `frontend/src/components/PanelIcons.ts` | stroke 1.7、圆头、currentColor、aria-hidden，10 个器物图标 | **仅侧栏一级导航入口**（机架/地球/数据库/立方体/终端/仪表盘/磁带/防火墙/证书/计划任务）——产品的「门面」图形，需与通用图标有辨识度差 |
+| 通用集 `@vicons/ionicons5` | npm 依赖 | Ionicons 5 官方描边风格 | 页内一切操作/状态/装饰图标（按钮、Tab、空态、下拉、面包屑）；默认 `Outline` 风格，不混用 Fill |
+
+- **新增图标的判断顺序**：是侧栏一级入口吗？是 → 在 PanelIcons.ts 按同规格手绘；否 → 在 ionicons5 里挑，挑不到再考虑扩展专属集（需过设计评审）。
+- **图标尺寸档（收敛为 3 档声明值）**：
+
+| 档 | 尺寸 | 场景 |
+|----|------|------|
+| sm | 16px | 按钮内图标、行内装饰 |
+| md | 20px | 卡片标题、下拉菜单项 |
+| lg | 34px | 侧栏 Logo 标记、空态大图（空态如需更大按 2×md 取整） |
+
+- **图标颜色**：继承文字颜色，状态图标使用对应功能色
+- **图标与文字间距**：8px（`--space-2`）
 
 ## 暗色模式（规划中）
 
@@ -384,4 +380,59 @@
 - **Figma 设计稿**：（待补充）
 - **组件库文档**：[Naive UI](https://www.naiveui.com/)
 - **图标库**：[Ionicons](https://ionic.io/ionicons)
-- **Design Token 定义**：`frontend/src/styles/index.css`
+- **Design Token 定义**：`frontend/src/styles/tokens.css`（经 `main.css` 全局引入）
+
+## 决策记录
+
+### DR-001 · NCard 网格豁免边界（审计 D06②）
+
+弹窗/卡片统一归口 PageCard、ContentModal、ModalForm 三个原子组件，但以下场景**豁免**直用 NCard：
+
+| 位置 | 用法 | 豁免理由 |
+|------|------|----------|
+| `appstore/AppStoreTab.vue` | `NCard hoverable` 应用卡片网格 | 商品卡语义：需 hover 抬升、封面区+操作区复合结构，PageCard 是页面容器不是商品卡 |
+| `plugins/index.vue` | `NCard hoverable` 插件卡片网格 | 同上 |
+| `nodes/index.vue` | `NCard size="small"` 节点卡片网格 | 多实例并列的实体卡，非页面分区 |
+| `login/Login.vue` / `ChangePassword.vue` / `ResetPassword.vue` | 居中表单卡 | 登录态外的独立页，不在 DefaultLayout 的 PageCard 体系内 |
+
+边界口诀：**页面分区 → PageCard；重复实体卡 / 商品卡 → NCard；一切弹窗 → ContentModal/ModalForm**。新增页面先问归属，拿不准默认 PageCard。
+
+### DR-002 · 性能预算（审计 D16）
+
+| 指标 | 预算 | 现状基线（2026-10-21 vite build 实测 gzip） | 超预算处理 |
+|------|------|----------------------------------|------------|
+| 首屏必载 JS（index + naive-ui，gzip） | < 500 KB | 96 + 380 = **476 KB**（贴线） | naive-ui 已按需 tree-shake 至此；进一步压需换轻量组件方案或自研核心组件，属架构级决策 |
+| 异步路由 chunk（gzip，懒加载不阻塞首屏） | < 200 KB | echarts 168 / xterm 72 / monaco 580（编辑器页专用，进入 CodeEditor 路由才加载） | monaco 超预算属已知豁免：仅容器终端/代码编辑场景触达；若需压缩可切 `monaco-editor/core` 更薄内核或 lazy 语言包 |
+| CSS（gzip） | < 60 KB | ~1 KB/页 + 全局 | — |
+
+> 注：构建时 1500 KB raw 警告来自 monaco（2244 KB raw / 580 KB gzip）——异步分包不进首屏，警告可忽略；若要消除告警可调 `chunkSizeWarningLimit` 或接受现状。
+
+- 构建门：`npm run build` 输出各 chunk 体积；单 chunk 超预算时在 CI 评论中提示（暂无人工看护时以本表为准）。
+- 已有约束保持：echarts 按需注册（`echarts/core` + 显式 `use`）、monaco 仅 editor.api 内核经异步组件加载、26 路由全量懒加载。
+
+### DR-003 · Token 明文存 localStorage 的风险决策（审计 D26②）
+
+现状：`stores/auth.ts` 将 JWT 存 `localStorage`（`cloudpivot_token`），XSS 窃取面存在。
+
+**决策：维持 localStorage，不用 HttpOnly cookie。** 理由：
+
+1. **威胁模型**：面板定位内网/自托管场景（docker-compose 单机部署），攻击者需先拿到同源 JS 执行权——而 CSP 已禁 `unsafe-inline`/脚本白名单化（见安全响应头配置），v-html 0 处，XSS 注入面在审计中为干净项。
+2. **架构权衡**：HttpOnly cookie 方案需后端配合 SameSite/CSRF token 全链路改造；当前前后端分离、API 首次用 token 交换，改 cookie 的收益低于改造成本。
+3. **残余风险**：若未来暴露公网，必须重新评估——届时优先引入 httpOnly + refresh token 轮换，而非仅移动存储位置。
+
+**复审触发条件**：产品公网化、引入第三方脚本（统计/客服）、或 XSS 注入面出现实锤漏洞时，本决策强制重开。
+
+### DR-004 · CSP `unsafe-eval` 移除（审计 D26③）
+
+**取证结论（2026-10-21，dist/assets grep）**：主包 `index-*.js` 中存在 1 处 `new Function`，来源为 **vue-i18n 的 JIT 消息编译**（`__INTLIFY_JIT_COMPILATION__` 宏分支，运行时把 locale message 编译为函数）。Vite/vue 本体不需要 eval，但 i18n 需要。
+
+**决策：保留 `unsafe-eval`。** 移除路径（若未来要收紧 CSP）：引入 `@intlify/unplugin-vue-i18n` 在构建期预编译 locale 消息，产物不再含 JIT 分支，届时可同步删 CSP 中的 `unsafe-eval`。当前内网部署场景下，收益不抵改造成本。
+
+### DR-005 · 前端静态取证记录（2026-10-21）
+
+| 取证项 | 方法 | 结论 |
+|--------|------|------|
+| CSP `unsafe-eval` 可移除性 | `grep "new Function" dist/assets/*.js` | 1 处，vue-i18n JIT 所需 → 保留（见 DR-004） |
+| 称呼「您/你」一致性 | `grep 您\|你 locales/zh-CN/**/*.ts` | 修复前 3 处孤例（loginSubtitle / ai subtitle / privacyHint），已统一为词表零人称；en/ja 的 second-person 属该语言惯用，不改 |
+| 时间格式化 Intl 一致性 | grep `Intl.\|toLocale` 全 src | `utils/format.ts` 无 Intl（手写格式化，出口统一 ✅）；但 `toLocaleString()` 直用 4 处（audit / sessions 日期 ×2、database 行数 ×2）——已处置——日期 2 处（audit anomaly last_seen / sessions fmtTime）收口 `formatDate()`（2026-10-21 上线）；数字千分位 2 处（database rows）保留原生；主审计表 created_at 为 mono 原始 ISO 刻意保留（审计溯源用） |
+| 危险开关二次确认 | 全量 NSwitch 走查（10 文件） | 直接生效的开关 4 处：NTP 同步 / 插件启停 / 容器 showImages / 日志 follow——均为**可逆非破坏**操作；所有表单内开关走保存按钮二段确认；未发现「危险且无确认」的开关 |

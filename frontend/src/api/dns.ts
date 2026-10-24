@@ -48,11 +48,33 @@ export function getDNSAccounts() {
   })
 }
 
+/**
+ * 凭据字段组装。
+ *
+ * 后端 dto.CreateDNSAccountRequest 要求 credentials 是一个必填的 map
+ * （backend/internal/dto/dns.go），此前前端提交的是扁平字段
+ * （access_key_id / secret_id / api_token …），必然 400
+ * （2026-10-23 闭环审计）。
+ */
+function toDNSCredentials(data: Partial<DNSAccountPayload>): Record<string, string> {
+  const creds: Record<string, string> = {}
+  if (data.access_key_id) creds.access_key_id = data.access_key_id
+  if (data.access_key_secret) creds.access_key_secret = data.access_key_secret
+  if (data.secret_id) creds.secret_id = data.secret_id
+  if (data.secret_key) creds.secret_key = data.secret_key
+  if (data.api_token) creds.api_token = data.api_token
+  return creds
+}
+
 export function createDNSAccount(data: DNSAccountPayload) {
   return request<DNSAccount>({
     url: '/dns/accounts',
     method: 'post',
-    data
+    data: {
+      name: data.name,
+      provider_type: data.provider_type,
+      credentials: toDNSCredentials(data)
+    }
   })
 }
 
@@ -60,7 +82,11 @@ export function updateDNSAccount(id: number, data: Partial<DNSAccountPayload>) {
   return request<DNSAccount>({
     url: `/dns/accounts/${id}`,
     method: 'put',
-    data
+    data: {
+      ...(data.name !== undefined ? { name: data.name } : {}),
+      ...(data.enabled !== undefined ? { enabled: data.enabled } : {}),
+      credentials: toDNSCredentials(data)
+    }
   })
 }
 

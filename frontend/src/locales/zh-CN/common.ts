@@ -9,7 +9,6 @@ export default {
   operation: '操作',
   status: '状态',
   loading: '加载中',
-  submit: '提交',
   reset: '重置',
   close: '关闭',
   back: '返回',
@@ -21,6 +20,10 @@ export default {
   operationSuccess: '操作成功',
   operationFailed: '操作失败',
   noData: '暂无数据',
+  retry: '重试',
+  commandPalette: '命令面板',
+  commandPlaceholder: '搜索页面或操作…',
+  noResults: '无匹配结果',
   all: '全部',
   actions: '操作',
   name: '名称',
@@ -38,5 +41,16 @@ export default {
   expand: '展开菜单',
   notifications: '通知',
   toggleLight: '切换浅色',
-  toggleDark: '切换深色'
+  toggleDark: '切换深色',
+  errorBoundary: {
+    title: '页面渲染出错',
+    retry: '重试'
+  },
+  errors: {
+    pageNotFound: '页面不存在或访问路径无效',
+    appError: '应用错误：{msg}',
+    requestFailed: '请求失败',
+    networkError: '网络错误',
+    buildRequestFailed: '构建请求失败（HTTP {status}）'
+  }
 }

@@ -18,3 +18,11 @@ log:
 
 monitor:
   interval: 15  # 采集间隔（秒）
+
+site:
+  # 站点根目录（相对面板工作目录 backend/）
+  root_dir: ./runtime/www
+  # nginx 站点配置目录（需被服务器 nginx include 才生效）
+  nginx_conf_dir: ./runtime/nginx/conf.d
+  # SSL 证书目录
+  ssl_dir: ./runtime/ssl

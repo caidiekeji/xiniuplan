@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { ref, reactive, computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { NCard, NForm, NFormItem, NInput, NButton, NAlert, NIcon } from 'naive-ui'
 import { LockClosedOutline, ShieldCheckmarkOutline } from '@vicons/ionicons5'
 import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
 const authStore = useAuthStore()
+const { t } = useI18n()
 
 const loading = ref(false)
 const errorMsg = ref('')
@@ -20,13 +22,13 @@ const form = reactive({
 })
 
 const validatePasswordStrength = (_rule: any, value: string) => {
-  if (!value) return new Error('请输入新密码')
-  if (value.length < 8) return new Error('新密码至少 8 位')
+  if (!value) return new Error(t('changePassword.rules.newPasswordRequired'))
+  if (value.length < 8) return new Error(t('changePassword.rules.newPasswordMin'))
   if (!/[a-zA-Z]/.test(value) || !/\d/.test(value)) {
-    return new Error('新密码需同时包含字母和数字')
+    return new Error(t('changePassword.rules.newPasswordComplexity'))
   }
   if (value === form.oldPassword) {
-    return new Error('新密码不能与原密码相同')
+    return new Error(t('changePassword.rules.newPasswordSameAsOld'))
   }
   return true
 }
@@ -34,7 +36,7 @@ const validatePasswordStrength = (_rule: any, value: string) => {
 const rules = computed(() => ({
   oldPassword: {
     required: true,
-    message: '请输入原密码',
+    message: t('changePassword.rules.oldPasswordRequired'),
     trigger: 'blur'
   },
   newPassword: {
@@ -46,8 +48,8 @@ const rules = computed(() => ({
     required: true,
     trigger: ['blur', 'input'],
     validator: (_rule: any, value: string) => {
-      if (!value) return new Error('请再次输入新密码')
-      if (value !== form.newPassword) return new Error('两次输入的密码不一致')
+      if (!value) return new Error(t('changePassword.rules.confirmPasswordRequired'))
+      if (value !== form.newPassword) return new Error(t('changePassword.rules.passwordMismatch'))
       return true
     }
   }
@@ -67,12 +69,12 @@ async function handleSubmit() {
       old_password: form.oldPassword,
       new_password: form.newPassword
     })
-    successMsg.value = '密码修改成功，请使用新密码重新登录'
+    successMsg.value = t('changePassword.success')
     setTimeout(() => {
       router.push('/login')
     }, 1500)
   } catch (err: any) {
-    errorMsg.value = err.message || '密码修改失败'
+    errorMsg.value = err.message || t('changePassword.failed')
   } finally {
     loading.value = false
   }
@@ -93,8 +95,8 @@ async function handleSubmit() {
           <div class="chg-icon">
             <NIcon :size="36"><ShieldCheckmarkOutline /></NIcon>
           </div>
-          <h2 class="chg-card__title">修改密码</h2>
-          <p class="chg-card__subtitle">出于安全考虑，首次登录（或密码被重置后）必须修改密码后才能继续使用面板</p>
+          <h2 class="chg-card__title">{{ t('changePassword.title') }}</h2>
+          <p class="chg-card__subtitle">{{ t('changePassword.subtitle') }}</p>
         </div>
 
         <NAlert v-if="errorMsg" type="error" :show-icon="true" class="chg-alert" closable @close="errorMsg = ''">
@@ -110,7 +112,7 @@ async function handleSubmit() {
               v-model:value="form.oldPassword"
               type="password"
               show-password-on="click"
-              placeholder="原密码（初始密码见服务启动日志）"
+              :placeholder="t('changePassword.placeholders.oldPassword')"
               :input-props="{ autocomplete: 'current-password' }"
             >
               <template #prefix>
@@ -124,7 +126,7 @@ async function handleSubmit() {
               v-model:value="form.newPassword"
               type="password"
               show-password-on="click"
-              placeholder="新密码（至少 8 位，含字母和数字）"
+              :placeholder="t('changePassword.placeholders.newPassword')"
               :input-props="{ autocomplete: 'new-password' }"
             >
               <template #prefix>
@@ -138,7 +140,7 @@ async function handleSubmit() {
               v-model:value="form.confirmPassword"
               type="password"
               show-password-on="click"
-              placeholder="确认新密码"
+              :placeholder="t('changePassword.placeholders.confirmPassword')"
               :input-props="{ autocomplete: 'new-password' }"
               @keyup.enter="handleSubmit"
             >
@@ -157,7 +159,7 @@ async function handleSubmit() {
               @click="handleSubmit"
               class="chg-submit"
             >
-              确认修改
+              {{ t('changePassword.submit') }}
             </NButton>
           </NFormItem>
         </NForm>
@@ -185,8 +187,8 @@ async function handleSubmit() {
   &__grid {
     display: grid;
     grid-template-columns: repeat(12, 1fr);
-    gap: 28px;
-    padding: 40px;
+    gap: var(--space-6);
+    padding: var(--space-6);
     opacity: 0.25;
   }
 
@@ -195,6 +197,7 @@ async function handleSubmit() {
     height: 6px;
     border-radius: 50%;
     background: currentColor;
+    /* 豁免：3s 为警示闪烁循环周期，非交互过渡时长，不适用 --t-fast/normal/slow（审计 D01 豁免） */
     animation: chg-blink 3s ease-in-out infinite;
   }
 }
@@ -216,11 +219,11 @@ async function handleSubmit() {
 
   &__header {
     text-align: center;
-    margin-bottom: 20px;
+    margin-bottom: var(--space-5);
   }
 
   &__title {
-    margin: 8px 0 6px;
+    margin: var(--space-2) 0 var(--space-1);
     font-size: 20px;
     font-weight: 600;
   }
@@ -228,7 +231,7 @@ async function handleSubmit() {
   &__subtitle {
     margin: 0;
     font-size: 13px;
-    color: var(--faint);
+    color: var(--text-quaternary);
     line-height: 1.5;
   }
 }
@@ -240,15 +243,15 @@ async function handleSubmit() {
   width: 64px;
   height: 64px;
   border-radius: 16px;
-  color: #fff;
+  color: var(--on-color);
   background: linear-gradient(135deg, var(--acc), var(--acc-hover));
 }
 
 .chg-alert {
-  margin-bottom: 16px;
+  margin-bottom: var(--space-4);
 }
 
 .chg-submit {
-  margin-top: 4px;
+  margin-top: var(--space-1);
 }
 </style>

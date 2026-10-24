@@ -40,6 +40,9 @@ func RegisterContainerRoutes(r *gin.RouterGroup) {
 	r.GET("/containers/:id/logs", middleware.RequirePermission(model.PermContainerView), h.GetContainerLogs)
 	r.GET("/containers/:id/stats", middleware.RequirePermission(model.PermContainerView), h.GetContainerStats)
 	r.GET("/images", middleware.RequirePermission(model.PermContainerView), h.ListImages)
+
+	// 容器增强：exec 终端 / 网络 / 存储卷 / 镜像导入导出
+	RegisterContainerExtraRoutes(r)
 }
 
 // ListContainers GET /containers?all=true
@@ -156,12 +159,15 @@ func (h *ContainerHandler) GetContainerLogs(c *gin.Context) {
 	}
 
 	// 流式：通过 SSE 推送日志
-	reader, err := h.svc.GetContainerLogs(id, tail, true)
+	reader, cancel, err := h.svc.GetContainerLogs(id, tail, true)
 	if err != nil {
 		common.Fail(c, common.CodeServerError, "获取日志流失败: "+err.Error())
 		return
 	}
 	defer reader.Close()
+	if cancel != nil {
+		defer cancel()
+	}
 
 	// Docker 日志是多路复用格式，用 stdcopy + pipe 解析后再逐行推送
 	pr, pw := io.Pipe()

@@ -32,8 +32,10 @@ export async function getSSLList(): Promise<ApiResponse<SSLInfo[]>> {
     const sites = res.data?.items || []
     const list: SSLInfo[] = sites
       .filter((s: any) => s.ssl_enabled || s.ssl)
-      .map((s: any, idx: number): SSLInfo => ({
-        id: idx + 1,
+      .map((s: any): SSLInfo => ({
+        // id 必须是真实 siteId —— 此前用 idx+1 伪 ID，导致申请/续期/删除
+        // 打到别的站点上（2026-10-23 闭环审计）
+        id: s.id,
         siteId: s.id,
         domain: s.primary_domain || s.domain,
         provider: (s.ssl_provider as SSLProvider) || 'manual',
@@ -75,20 +77,25 @@ export function getSSLInfo(siteId: number) {
   })
 }
 
-/** 续期 SSL（重新申请） */
-export function renewSSL(siteId: number, email?: string) {
-  return request({
+/**
+ * 续期 SSL（重新申请）。
+ * email 是后端必填项——此前不传，续期按钮必然 400（2026-10-23 闭环审计）。
+ */
+export function renewSSL(siteId: number, email: string) {
+  return request<{ site?: unknown; status?: string }>({
     url: `/sites/${siteId}/ssl/apply`,
     method: 'post',
     data: { provider: 'letsencrypt', email }
   })
 }
 
-/** 删除 SSL（禁用） */
+/** 删除 SSL（禁用并清除证书）
+ *  此前用「申请空证书」变相删除，后端要求 cert/key 非空必然 400；
+ *  现由后端提供 DELETE /sites/:id/ssl 真正执行禁用与文件清理。
+ */
 export function deleteSSL(siteId: number) {
   return request({
-    url: `/sites/${siteId}/ssl/apply`,
-    method: 'post',
-    data: { provider: 'manual', cert: '', key: '' }
+    url: `/sites/${siteId}/ssl`,
+    method: 'delete'
   })
 }

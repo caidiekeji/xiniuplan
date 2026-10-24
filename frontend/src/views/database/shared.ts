@@ -44,14 +44,12 @@ export function rowsToObjects(columns: string[], rows: any[][]): Record<string, 
   })
 }
 
-export function buildDynamicColumns(columns: string[]): DataTableColumns {
+export function buildDynamicColumns(columns: string[] | null | undefined): DataTableColumns {
+  if (!Array.isArray(columns)) return []
   return columns.map((col) => ({ title: col, key: col }))
 }
 
-export function formatTime(s: string): string {
-  if (!s) return '-'
-  return s.replace('T', ' ').substring(0, 19)
-}
+export { formatISOTime as formatTime } from '@/utils/format'
 
 /* ==================== 类型映射 ==================== */
 

@@ -2,17 +2,15 @@
 import { ref, reactive, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import {
-  NCard, NForm, NFormItem, NInput, NButton, NAlert,
-  NIcon, NGrid, NGi, NModal
-} from 'naive-ui'
+import { NCard, NForm, NFormItem, NInput, NButton, NAlert, NIcon } from 'naive-ui'
+import { ContentModal } from '@/components'
 import {
   PersonOutline, LockClosedOutline, LogInOutline,
   ShieldCheckmarkOutline, ArrowBackOutline, KeyOutline,
   MailOutline
 } from '@vicons/ionicons5'
 import { useAuthStore } from '@/stores/auth'
-import { login as apiLogin, forgotPassword as apiForgotPassword, type LoginData } from '@/api/auth'
+import { login as apiLogin, forgotPassword as apiForgotPassword } from '@/api/auth'
 import { loginTOTP } from '@/api/totp'
 import RhinoLogo from '@/components/RhinoLogo.vue'
 
@@ -110,6 +108,9 @@ async function handleLogin() {
       }
       const redirect = (route.query.redirect as string) || '/dashboard'
       router.push(redirect)
+    } else if (!data.require_totp) {
+      // 防御：后端返回 200 但既无 token 也无 TOTP 标志时，不能静默无反应（用户感知为"登录后不跳转"）
+      errorMsg.value = t('auth.loginFailed')
     }
   } catch (err: any) {
     errorMsg.value = err.message || t('auth.loginFailed')
@@ -169,7 +170,7 @@ const forgotForm = reactive({ username: '', email: '' })
 async function handleForgot() {
   forgotError.value = ''
   if (!forgotForm.username.trim() || !forgotForm.email.trim()) {
-    forgotError.value = '请输入用户名和绑定邮箱'
+    forgotError.value = t('auth.forgot.requiredFields')
     return
   }
   forgotLoading.value = true
@@ -177,7 +178,7 @@ async function handleForgot() {
     await apiForgotPassword({ username: forgotForm.username.trim(), email: forgotForm.email.trim() })
     forgotSent.value = true
   } catch (err: any) {
-    forgotError.value = err.message || '发送失败，请稍后重试'
+    forgotError.value = err.message || t('auth.forgot.sendFailed')
   } finally {
     forgotLoading.value = false
   }
@@ -310,6 +311,7 @@ async function handleForgot() {
                   v-model:value="form.username"
                   :placeholder="t('auth.username')"
                   clearable
+                  @keyup.enter="handleLogin"
                 >
                   <template #prefix>
                     <NIcon><PersonOutline /></NIcon>
@@ -347,7 +349,7 @@ async function handleForgot() {
                 </NButton>
               </NFormItem>
               <div class="login-forgot">
-                <NButton text size="small" @click="showForgot = true">忘记密码？</NButton>
+                <NButton text size="small" @click="showForgot = true">{{ t('auth.forgot.link') }}</NButton>
               </div>
             </NForm>
           </template>
@@ -359,38 +361,38 @@ async function handleForgot() {
         </NCard>
 
         <!-- 忘记密码弹窗 -->
-        <NModal v-model:show="showForgot" preset="card" title="忘记密码" class="forgot-modal" :style="{ width: 'min(420px, 92vw)' }">
+        <ContentModal v-model:show="showForgot" :title="t('auth.forgot.title')" class="forgot-modal" size="sm">
           <template v-if="!forgotSent">
-            <p class="forgot-tip">输入用户名和绑定的邮箱，系统将发送密码重置链接（需先在"系统设置"中配置 SMTP）。</p>
+            <p class="forgot-tip">{{ t('auth.forgot.tip') }}</p>
             <NAlert v-if="forgotError" type="error" :show-icon="true" class="login-alert" closable @close="forgotError = ''">
               {{ forgotError }}
             </NAlert>
             <NForm :model="forgotForm" size="large">
               <NFormItem>
-                <NInput v-model:value="forgotForm.username" placeholder="用户名" clearable>
+                <NInput v-model:value="forgotForm.username" :placeholder="t('auth.forgot.usernamePlaceholder')" clearable>
                   <template #prefix>
                     <NIcon><PersonOutline /></NIcon>
                   </template>
                 </NInput>
               </NFormItem>
               <NFormItem>
-                <NInput v-model:value="forgotForm.email" placeholder="绑定邮箱" clearable @keyup.enter="handleForgot">
+                <NInput v-model:value="forgotForm.email" :placeholder="t('auth.forgot.emailPlaceholder')" clearable @keyup.enter="handleForgot">
                   <template #prefix>
                     <NIcon><MailOutline /></NIcon>
                   </template>
                 </NInput>
               </NFormItem>
               <NButton type="primary" block :loading="forgotLoading" @click="handleForgot">
-                发送重置链接
+                {{ t('auth.forgot.send') }}
               </NButton>
             </NForm>
           </template>
           <template v-else>
             <NAlert type="success" :show-icon="true">
-              如果用户名和邮箱匹配，重置链接将发送到该邮箱（30 分钟内有效）。请查收邮件后重置密码。
+              {{ t('auth.forgot.sentTip') }}
             </NAlert>
           </template>
-        </NModal>
+        </ContentModal>
       </div>
     </div>
   </div>
@@ -400,13 +402,13 @@ async function handleForgot() {
 .login-forgot {
   display: flex;
   justify-content: flex-end;
-  margin-top: -8px;
+  margin-top: calc(var(--space-2) * -1);
 }
 
 .forgot-tip {
-  margin: 0 0 14px;
+  margin: 0 0 var(--space-4);
   font-size: 13px;
-  color: var(--faint);
+  color: var(--text-quaternary);
   line-height: 1.6;
 }
 
@@ -443,6 +445,7 @@ async function handleForgot() {
   border-radius: 50%;
   background: var(--acc2);
   opacity: 0.15;
+  /* 豁免：4s 为呼吸循环动画周期，非交互过渡时长，不适用 --t-fast/normal/slow（审计 D01 豁免） */
   animation: dot-pulse 4s ease-in-out infinite;
 }
 
@@ -489,7 +492,7 @@ async function handleForgot() {
 }
 
 .login-brand__title {
-  font-size: var(--fs-hero);
+  font-size: var(--fs-h1);
   font-weight: 700;
   line-height: 1.3;
   color: var(--ink);
@@ -518,14 +521,14 @@ async function handleForgot() {
 }
 
 .login-brand__stat .mono {
-  font-size: var(--fs-stat);
+  font-size: var(--fs-title);
   font-weight: 700;
   color: var(--acc2);
 }
 
 .login-brand__stat-label {
   font-size: var(--fs-caption);
-  color: var(--faint);
+  color: var(--text-quaternary);
 }
 
 /* 右侧表单 */
@@ -556,7 +559,7 @@ async function handleForgot() {
 
 .login-card__subtitle {
   font-size: var(--fs-body);
-  color: var(--faint);
+  color: var(--text-quaternary);
 }
 
 .login-alert {
@@ -575,7 +578,7 @@ async function handleForgot() {
   gap: var(--space-2);
   margin-top: var(--space-5);
   font-size: var(--fs-caption);
-  color: var(--faint);
+  color: var(--text-quaternary);
 }
 
 /* TOTP 样式 */
@@ -628,7 +631,7 @@ async function handleForgot() {
     padding: var(--space-5);
   }
   .login-brand__title {
-    font-size: var(--fs-stat);
+    font-size: var(--fs-title);
   }
   .login-brand__stats {
     display: none;

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { NTabs, NTabPane, NButton, NSpace, NIcon, NEmpty } from 'naive-ui'
 import { ChevronBackOutline } from '@vicons/ionicons5'
 import { PageCard, StatusTag } from '@/components'
@@ -11,6 +12,8 @@ import UserManagerTab from './UserManagerTab.vue'
 import SqlExecutorTab from './SqlExecutorTab.vue'
 import RedisPanel from './RedisPanel.vue'
 import PgPanel from './PgPanel.vue'
+
+const { t } = useI18n()
 
 /* ==================== 共享状态 ==================== */
 
@@ -161,10 +164,10 @@ watch(activeTab, (tab) => {
 </script>
 
 <template>
-  <PageCard title="数据库" subtitle="MySQL / PostgreSQL / Redis 实例管理 · 库表操作 · 用户权限 · SQL 执行器">
+  <PageCard :title="t('database.title')" :subtitle="t('database.subtitle')">
     <NTabs v-model:value="activeTab" type="line" animated>
       <!-- Tab 1: 实例列表 -->
-      <NTabPane name="instances" tab="实例列表">
+      <NTabPane name="instances" :tab="t('database.tabs.instances')">
         <InstanceListTab
           :instances="instances"
           :loading="instancesLoading"
@@ -179,7 +182,7 @@ watch(activeTab, (tab) => {
       </NTabPane>
 
       <!-- Tab 2: 库表管理 -->
-      <NTabPane v-if="showMysqlTabs" name="schema" tab="库表管理">
+      <NTabPane v-if="showMysqlTabs" name="schema" :tab="t('database.tabs.schema')">
         <DatabaseManagerTab
           :instance-id="selectedInstanceId"
           :instance-options="mysqlInstanceOptions"
@@ -192,7 +195,7 @@ watch(activeTab, (tab) => {
       </NTabPane>
 
       <!-- Tab 3: 用户权限 -->
-      <NTabPane v-if="showMysqlTabs" name="users" tab="用户权限">
+      <NTabPane v-if="showMysqlTabs" name="users" :tab="t('database.tabs.users')">
         <UserManagerTab
           ref="userManagerTabRef"
           :instance-id="selectedInstanceId"
@@ -203,7 +206,7 @@ watch(activeTab, (tab) => {
       </NTabPane>
 
       <!-- Tab 4: SQL 执行器 -->
-      <NTabPane v-if="showMysqlTabs" name="sql" tab="SQL 执行器">
+      <NTabPane v-if="showMysqlTabs" name="sql" :tab="t('database.tabs.sql')">
         <SqlExecutorTab
           :instance-id="selectedInstanceId"
           :instance-options="mysqlInstanceOptions"
@@ -213,7 +216,7 @@ watch(activeTab, (tab) => {
       </NTabPane>
 
       <!-- Tab 5: PostgreSQL 管理 -->
-      <NTabPane v-if="showPgTab" name="pg" tab="PG 管理">
+      <NTabPane v-if="showPgTab" name="pg" :tab="t('database.tabs.pg')">
         <div v-if="selectedInstanceId" class="mgmt-panel">
           <div class="mgmt-panel__header">
             <NSpace>
@@ -221,18 +224,18 @@ watch(activeTab, (tab) => {
               <StatusTag status="running" text="PostgreSQL" />
             </NSpace>
             <NButton size="small" @click="activeTab = 'instances'">
-              <template #icon><NIcon><ChevronBackOutline /></NIcon></template>返回实例列表
+              <template #icon><NIcon><ChevronBackOutline /></NIcon></template>{{ t('database.backToInstances') }}
             </NButton>
           </div>
           <PgPanel :instance-id="selectedInstanceId" :key="selectedInstanceId" />
         </div>
         <div v-else class="empty-hint">
-          <NEmpty description="请先选择一个 PostgreSQL 实例" />
+          <NEmpty :description="t('database.selectPgInstance')" />
         </div>
       </NTabPane>
 
       <!-- Tab 6: Redis 管理 -->
-      <NTabPane v-if="showRedisTab" name="redis" tab="Redis 管理">
+      <NTabPane v-if="showRedisTab" name="redis" :tab="t('database.tabs.redis')">
         <div v-if="selectedInstanceId" class="mgmt-panel">
           <div class="mgmt-panel__header">
             <NSpace>
@@ -240,13 +243,13 @@ watch(activeTab, (tab) => {
               <StatusTag status="error" text="Redis" />
             </NSpace>
             <NButton size="small" @click="activeTab = 'instances'">
-              <template #icon><NIcon><ChevronBackOutline /></NIcon></template>返回实例列表
+              <template #icon><NIcon><ChevronBackOutline /></NIcon></template>{{ t('database.backToInstances') }}
             </NButton>
           </div>
           <RedisPanel :instance-id="selectedInstanceId" :key="selectedInstanceId" />
         </div>
         <div v-else class="empty-hint">
-          <NEmpty description="请先选择一个 Redis 实例" />
+          <NEmpty :description="t('database.selectRedisInstance')" />
         </div>
       </NTabPane>
     </NTabs>

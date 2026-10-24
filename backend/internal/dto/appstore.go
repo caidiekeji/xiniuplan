@@ -35,6 +35,9 @@ type InstallRequest struct {
 
 // InstalledAppResponse 已安装应用响应
 type InstalledAppResponse struct {
+	// Success 安装是否成功——前端 InstallDialog 依此判定成败，
+	// 此前该字段缺失导致「安装成功却提示失败」（2026-10-23 闭环审计）
+	Success         bool              `json:"success"`
 	ID              uint              `json:"id"`
 	Key             string            `json:"key"`
 	Name            string            `json:"name"`
@@ -43,8 +46,14 @@ type InstalledAppResponse struct {
 	Status          string            `json:"status"`
 	EnvParams       map[string]string `json:"env_params"`
 	ContainerStatus string            `json:"container_status"`
-	CreatedAt       string            `json:"created_at"`
-	UpdatedAt       string            `json:"updated_at"`
+	// ContainerID compose 容器 ID（前端「查看日志」依赖）
+	ContainerID string `json:"container_id"`
+	// HostPort 宿主机映射端口（前端拼装访问地址依赖）
+	HostPort int `json:"host_port"`
+	// AccessURL 应用访问地址（由 api 层按请求 Host 拼装）
+	AccessURL string `json:"access_url"`
+	CreatedAt string `json:"created_at"`
+	UpdatedAt string `json:"updated_at"`
 }
 
 // AppStatusResponse 应用安装状态响应

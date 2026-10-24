@@ -1,8 +1,12 @@
 <script setup lang="ts">
+import { NSkeleton } from 'naive-ui'
+
 defineProps<{
   title?: string
   subtitle?: string
   padding?: string
+  /** 为 true 时 body 区渲染骨架屏（替代内容区），用于首屏数据加载态 */
+  loading?: boolean
 }>()
 </script>
 
@@ -18,7 +22,11 @@ defineProps<{
       </div>
     </div>
     <div class="page-card__body" :style="{ padding: padding || 'var(--space-5)' }">
-      <slot />
+      <div v-if="loading" class="page-card__skeleton" aria-hidden="true">
+        <NSkeleton height="32px" :sharp="false" />
+        <NSkeleton v-for="i in 4" :key="i" height="20px" :sharp="false" :width="`${96 - i * 7}%`" />
+      </div>
+      <slot v-else />
     </div>
   </div>
 </template>
@@ -63,8 +71,14 @@ defineProps<{
 
 .page-card__subtitle {
   font-size: var(--fs-caption);
-  color: var(--faint);
+  color: var(--text-quaternary);
   margin-top: var(--space-1);
+}
+
+.page-card__skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
 }
 
 /* 移动端适配 */

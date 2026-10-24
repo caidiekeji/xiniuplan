@@ -1,4 +1,12 @@
 export default {
+  navLabel: 'Main navigation',
+  groups: {
+    overview: 'Overview',
+    apps: 'Applications',
+    ops: 'Operations',
+    security: 'Security',
+    system: 'System'
+  },
   dashboard: 'Dashboard',
   website: 'Websites',
   database: 'Databases',
@@ -16,5 +24,12 @@ export default {
   ssl: 'SSL Certificates',
   users: 'User Management',
   audit: 'Audit Logs',
-  settings: 'System Settings'
+  sessions: 'Sessions & API Keys',
+  settings: 'System Settings',
+  deploy: 'Deploy',
+  daemon: 'Daemons',
+  probe: 'Probes',
+  protection: 'Protection',
+  nodes: 'Nodes',
+  ai: 'AI Assistant'
 }

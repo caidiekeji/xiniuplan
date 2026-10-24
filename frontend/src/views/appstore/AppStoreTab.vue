@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, h } from 'vue'
-import { useMessage } from 'naive-ui'
-import {
-  NButton, NSpace, NIcon, NInput, NTag, NEmpty, NSpin, NGrid, NGi, NCard, NSelect
-} from 'naive-ui'
+import { ref, computed, watch, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { useMessage } from '@/composables/useMessage'
+import { NButton, NIcon, NInput, NTag, NEmpty, NSpin, NCard, NSelect } from 'naive-ui'
 import { SearchOutline, DownloadOutline } from '@vicons/ionicons5'
 import * as appstoreApi from '@/api/appstore'
 import type { App, AppCategory, AppSource } from '@/api/appstore'
@@ -11,6 +10,7 @@ import {
   getIconColor, categoryLabel, categoryTagType, appSourceTag
 } from './shared'
 
+const { t } = useI18n()
 const message = useMessage()
 
 /* ==================== Props / Emits ==================== */
@@ -18,10 +18,6 @@ const message = useMessage()
 const props = defineProps<{
   sources: AppSource[]
   sourcesLoading: boolean
-}>()
-
-const emit = defineEmits<{
-  (e: 'install', app: App): void
 }>()
 
 /* ==================== 应用列表 ==================== */
@@ -34,17 +30,17 @@ const searchInput = ref('')
 const searchDebounced = ref('')
 let searchTimer: ReturnType<typeof setTimeout> | null = null
 
-const categories: { label: string; value: AppCategory | 'all' }[] = [
-  { label: '全部', value: 'all' },
-  { label: '建站', value: 'website' },
-  { label: '开发工具', value: 'devtools' },
-  { label: '数据库', value: 'database' },
-  { label: '中间件', value: 'middleware' },
-  { label: '监控', value: 'monitor' },
-  { label: '办公', value: 'office' },
-  { label: '存储', value: 'storage' },
-  { label: '网络', value: 'network' }
-]
+const categories = computed<{ label: string; value: AppCategory | 'all' }[]>(() => [
+  { label: t('appstore.storeTab.allCategories'), value: 'all' },
+  { label: t('appstore.categories.website'), value: 'website' },
+  { label: t('appstore.categories.devtools'), value: 'devtools' },
+  { label: t('appstore.categories.database'), value: 'database' },
+  { label: t('appstore.categories.middleware'), value: 'middleware' },
+  { label: t('appstore.categories.monitor'), value: 'monitor' },
+  { label: t('appstore.categories.office'), value: 'office' },
+  { label: t('appstore.categories.storage'), value: 'storage' },
+  { label: t('appstore.categories.network'), value: 'network' }
+])
 
 const sourceMap = computed(() => {
   const m: Record<string, AppSource> = {}
@@ -56,28 +52,28 @@ const sourceMap = computed(() => {
 
 /** 来源筛选选项：分组（官方源 / 社区源 / 私有源） */
 const sourceFilterOptions = computed(() => {
-  const opts: any[] = [{ label: '全部来源', value: 'all' }]
+  const opts: any[] = [{ label: t('appstore.storeTab.allSources'), value: 'all' }]
   const official = props.sources.filter((s) => s.type === 'official')
   const community = props.sources.filter((s) => s.type === 'community')
   const private_ = props.sources.filter((s) => s.type === 'private')
   if (official.length) {
     opts.push({
       type: 'group',
-      label: '官方源',
+      label: t('appstore.storeTab.officialGroup'),
       children: official.map((s) => ({ label: s.name, value: s.id }))
     })
   }
   if (community.length) {
     opts.push({
       type: 'group',
-      label: '社区源',
+      label: t('appstore.storeTab.communityGroup'),
       children: community.map((s) => ({ label: s.name, value: s.id }))
     })
   }
   if (private_.length) {
     opts.push({
       type: 'group',
-      label: '私有源',
+      label: t('appstore.storeTab.privateGroup'),
       children: private_.map((s) => ({ label: s.name, value: s.id }))
     })
   }
@@ -119,7 +115,7 @@ async function loadApps() {
     const res = await appstoreApi.getApps(undefined, undefined, sourceId)
     apps.value = res.data.items
   } catch (e: any) {
-    message.error(e.message || '加载应用列表失败')
+    message.error(e.message || t('appstore.storeTab.loadFailed'))
     apps.value = []
   } finally {
     appsLoading.value = false
@@ -161,13 +157,13 @@ defineExpose({ loadApps })
         <NSelect
           v-model:value="selectedSource"
           :options="sourceFilterOptions"
-          placeholder="来源"
+          :placeholder="t('appstore.storeTab.sourcePlaceholder')"
           size="small"
           style="width: 180px"
         />
         <NInput
           v-model:value="searchInput"
-          placeholder="搜索应用..."
+          :placeholder="t('appstore.storeTab.searchPlaceholder')"
           clearable
           size="small"
           style="width: var(--input-2xl)"
@@ -203,7 +199,7 @@ defineExpose({ loadApps })
                 :type="categoryTagType(app.category) as any"
                 class="app-card__cat"
               >
-                {{ categoryLabel(app.category) }}
+                {{ categoryLabel(t, app.category) }}
               </NTag>
               <component :is="appSourceTag(app, sourceMap)" v-if="app.source_id" />
             </div>
@@ -213,17 +209,17 @@ defineExpose({ loadApps })
 
           <div v-if="app.resources" class="app-card__resources">
             <NTag v-if="app.resources.memory" size="tiny" bordered type="info">
-              内存 {{ app.resources.memory }}
+              {{ t('appstore.storeTab.memory', { value: app.resources.memory }) }}
             </NTag>
             <NTag v-if="app.resources.disk" size="tiny" bordered type="info">
-              磁盘 {{ app.resources.disk }}
+              {{ t('appstore.storeTab.disk', { value: app.resources.disk }) }}
             </NTag>
           </div>
 
           <div class="app-card__footer">
             <NButton type="primary" size="small" block @click="$emit('install', app)">
               <template #icon><NIcon><DownloadOutline /></NIcon></template>
-              安装
+              {{ t('appstore.storeTab.install') }}
             </NButton>
           </div>
         </NCard>
@@ -233,8 +229,8 @@ defineExpose({ loadApps })
         <NEmpty
           :description="
             searchDebounced || selectedCategory !== 'all' || selectedSource !== 'all'
-              ? '没有匹配的应用'
-              : '暂无可用应用'
+              ? t('appstore.storeTab.noMatch')
+              : t('appstore.storeTab.noApps')
           "
         />
       </div>
@@ -266,7 +262,7 @@ defineExpose({ loadApps })
 
 .cat-tag {
   cursor: pointer;
-  transition: all var(--t-fast) var(--ease);
+  transition: color var(--t-fast) var(--ease), background-color var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease);
 }
 
 .cat-tag:hover {
@@ -349,15 +345,15 @@ defineExpose({ loadApps })
 
 .app-card__version {
   font-size: var(--fs-caption);
-  color: var(--faint);
-  margin-top: 2px;
+  color: var(--text-quaternary);
+  margin-top: var(--space-0);
 }
 
 .app-card__tags {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 4px;
+  gap: var(--space-1);
   flex-shrink: 0;
 }
 

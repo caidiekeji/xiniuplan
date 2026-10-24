@@ -2,7 +2,9 @@ import { request } from './request'
 
 /* ==================== 类型定义 ==================== */
 
-export type CronTaskType = 'shell' | 'backup' | 'url' | 'app_restart'
+export type CronTaskType =
+  | 'shell' | 'backup' | 'url' | 'app_restart'
+  | 'ssl_check' | 'docker_cleanup' | 'recycle_cleanup' | 'tamper_check' | 'virus_scan'
 export type CronTaskStatus = 'enabled' | 'disabled'
 
 export interface CronTask {

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
-import { useMessage } from 'naive-ui'
+import { useMessage } from '@/composables/useMessage'
 import {
   NTabs, NTabPane, NButton, NSpace, NIcon,
   NForm, NFormItem, NInput, NInputNumber
@@ -13,14 +13,16 @@ import { FitAddon } from 'xterm-addon-fit'
 import 'xterm/css/xterm.css'
 import { useAuthStore } from '@/stores/auth'
 import { useThemeTokens, hexToRgba } from '@/composables/useThemeTokens'
+import { useI18n } from 'vue-i18n'
 import {
   AddOutline, TrashOutline, CopyOutline, ClipboardOutline,
   ChevronDownOutline, ChevronUpOutline
 } from '@vicons/ionicons5'
 
+const { t } = useI18n()
 const message = useMessage()
 const authStore = useAuthStore()
-const { tokens, refresh: refreshTokens } = useThemeTokens()
+const { tokens } = useThemeTokens()
 
 /* ==================== 类型 ==================== */
 type ConnStatus = 'connecting' | 'connected' | 'disconnected'
@@ -66,16 +68,16 @@ const connForm = ref<ConnConfig>({
   password: ''
 })
 const connFormRef = ref()
-const connRules: FormRules = {
-  host: { required: true, message: '请输入主机地址', trigger: 'blur' },
-  port: { required: true, type: 'number', min: 1, max: 65535, message: '端口范围 1-65535', trigger: 'blur' },
-  username: { required: true, message: '请输入用户名', trigger: 'blur' }
-}
+const connRules = computed<FormRules>(() => ({
+  host: { required: true, message: t('terminal.rules.hostRequired'), trigger: 'blur' },
+  port: { required: true, type: 'number', min: 1, max: 65535, message: t('terminal.rules.portRange'), trigger: 'blur' },
+  username: { required: true, message: t('terminal.rules.usernameRequired'), trigger: 'blur' }
+}))
 const connecting = ref(false)
 
 const instances = new Map<string, TermInstance>()
 
-const activeTab = computed(() => tabs.value.find((t) => t.id === activeId.value) || null)
+const activeTab = computed(() => tabs.value.find((tk) => tk.id === activeId.value) || null)
 const activeStatusType = computed<StatusType>(() => {
   const s = activeTab.value?.status
   if (s === 'connected') return 'running'
@@ -84,9 +86,9 @@ const activeStatusType = computed<StatusType>(() => {
 })
 const activeStatusText = computed(() => {
   const s = activeTab.value?.status
-  if (s === 'connected') return '已连接'
-  if (s === 'connecting') return '连接中'
-  return '已断开'
+  if (s === 'connected') return t('terminal.status.connected')
+  if (s === 'connecting') return t('terminal.status.connecting')
+  return t('terminal.status.disconnected')
 })
 
 /* ==================== 工具 ==================== */
@@ -104,13 +106,13 @@ function statusLedClass(s: ConnStatus) {
 
 /* ==================== 终端创建 / 连接 ==================== */
 function createTerminalOptions() {
-  const t = tokens.value
-  const bg = t.bg || '#0e1117'
-  const ink = t.ink || '#e8ecf2'
-  const acc = t.acc || '#1ba784'
+  const tk = tokens.value
+  const bg = tk.bg || '#0e1117'
+  const ink = tk.ink || '#e8ecf2'
+  const acc = tk.acc || '#1ba784'
   return {
-    fontFamily: t.fontMono || '"JetBrains Mono", Consolas, "Courier New", monospace',
-    fontSize: parseInt(t.termFontSize) || 14,
+    fontFamily: tk.fontMono || '"JetBrains Mono", Consolas, "Courier New", monospace',
+    fontSize: parseInt(tk.termFontSize) || 14,
     lineHeight: 1.2,
     cursorBlink: true,
     cursorStyle: 'bar' as const,
@@ -122,15 +124,15 @@ function createTerminalOptions() {
       cursor: acc,
       cursorAccent: bg,
       selectionBackground: hexToRgba(acc, 0.3),
-      black: t.surface || '#1a2030',
-      red: t.err || '#e85d4d',
-      green: t.ok || '#2dd4a8',
-      yellow: t.warn || '#1ba784',
-      blue: t.info || '#60a5fa',
-      magenta: t.termMagenta || '#c084fc',
-      cyan: t.termCyan || '#22d3ee',
+      black: tk.surface || '#1a2030',
+      red: tk.err || '#e85d4d',
+      green: tk.ok || '#2dd4a8',
+      yellow: tk.warn || '#f59e0b',
+      blue: tk.info || '#60a5fa',
+      magenta: tk.termMagenta || '#c084fc',
+      cyan: tk.termCyan || '#22d3ee',
       white: ink,
-      brightBlack: t.faint || '#5c6678'
+      brightBlack: tk.faint || '#5c6678'
     }
   }
 }
@@ -138,7 +140,7 @@ function createTerminalOptions() {
 function initTerminal(id: string) {
   const container = document.getElementById(`term-${id}`)
   if (!container) return
-  const tab = tabs.value.find((t) => t.id === id)
+  const tab = tabs.value.find((tk) => tk.id === id)
   if (!tab) return
 
   const term = new Terminal(createTerminalOptions())
@@ -186,7 +188,7 @@ function initTerminal(id: string) {
 
 function connect(id: string) {
   const inst = instances.get(id)
-  const tab = tabs.value.find((t) => t.id === id)
+  const tab = tabs.value.find((tk) => tk.id === id)
   if (!inst || !tab || inst.disposed) return
 
   tab.status = 'connecting'
@@ -225,15 +227,15 @@ function connect(id: string) {
         if (!tab.connectedOnce) {
           tab.connectedOnce = true
           tab.status = 'connected'
-          inst.term.write('\r\n\x1b[32m[云枢终端 · 已连接]\x1b[0m\r\n')
+          inst.term.write(`\r\n\x1b[32m[${t('terminal.termOutput.connected')}]\x1b[0m\r\n`)
         }
         inst.term.write(msg.data)
       } else if (msg.type === 'error') {
         // SSH 认证/连接失败：显示错误且不计入自动重连（相同参数重连必然再失败）
-        inst.term.write(`\r\n\x1b[31m[错误] ${msg.data}\x1b[0m\r\n`)
+        inst.term.write(`\r\n\x1b[31m[${t('terminal.termOutput.error')}] ${msg.data}\x1b[0m\r\n`)
         inst.reconnectAttempts = 3
       } else if (msg.type === 'close') {
-        inst.term.write('\r\n\x1b[33m[服务端已关闭连接]\x1b[0m\r\n')
+        inst.term.write(`\r\n\x1b[33m[${t('terminal.termOutput.serverClosed')}]\x1b[0m\r\n`)
         scheduleReconnect(id)
       }
     } catch {
@@ -256,12 +258,12 @@ function scheduleReconnect(id: string) {
   const inst = instances.get(id)
   if (!inst || inst.disposed) return
   if (inst.reconnectAttempts >= 3) {
-    inst.term.write('\r\n\x1b[31m[重连失败，已达到最大次数]\x1b[0m\r\n')
+    inst.term.write(`\r\n\x1b[31m[${t('terminal.termOutput.reconnectFailed')}]\x1b[0m\r\n`)
     return
   }
   const delay = Math.pow(2, inst.reconnectAttempts) * 1000
   inst.reconnectAttempts += 1
-  inst.term.write(`\r\n\x1b[33m[${delay / 1000}s 后第 ${inst.reconnectAttempts} 次重连…]\x1b[0m\r\n`)
+  inst.term.write(`\r\n\x1b[33m[${t('terminal.termOutput.reconnecting', { seconds: delay / 1000, attempt: inst.reconnectAttempts })}]\x1b[0m\r\n`)
   inst.reconnectTimer = window.setTimeout(() => connect(id), delay)
 }
 
@@ -281,7 +283,6 @@ function sendResize(id: string) {
 function createTab(conn?: ConnConfig) {
   const id = genId()
   const sessionId = genSession()
-  const idx = tabs.value.length + 1
   const c: ConnConfig = conn || { ...connForm.value }
   tabs.value.push({
     id,
@@ -325,7 +326,7 @@ function closeTab(id: string) {
     inst.term.dispose()
     instances.delete(id)
   }
-  tabs.value = tabs.value.filter((t) => t.id !== id)
+  tabs.value = tabs.value.filter((tk) => tk.id !== id)
   if (activeId.value === id) {
     activeId.value = tabs.value.length ? tabs.value[tabs.value.length - 1].id : ''
   }
@@ -346,7 +347,7 @@ const quickCommands = [
 
 function runQuick(cmd: string) {
   if (!activeId.value) {
-    message.warning('请先打开一个终端标签')
+    message.warning(t('terminal.messages.noTab'))
     return
   }
   send(activeId.value, { type: 'input', data: cmd })
@@ -362,14 +363,14 @@ async function copySelection() {
   if (!inst) return
   const text = inst.term.getSelection()
   if (!text) {
-    message.warning('没有选中的文本')
+    message.warning(t('terminal.messages.noSelection'))
     return
   }
   try {
     await navigator.clipboard.writeText(text)
-    message.success('已复制到剪贴板')
+    message.success(t('terminal.messages.copied'))
   } catch {
-    message.error('复制失败')
+    message.error(t('terminal.messages.copyFailed'))
   }
 }
 
@@ -379,7 +380,7 @@ async function pasteFromClipboard() {
     const text = await navigator.clipboard.readText()
     send(activeId.value, { type: 'input', data: text })
   } catch {
-    message.warning('无法读取剪贴板，请使用 Ctrl+Shift+V')
+    message.warning(t('terminal.messages.clipboardDenied'))
   }
 }
 
@@ -425,24 +426,24 @@ onBeforeUnmount(() => {
     <!-- 顶部栏 -->
     <div class="term-header">
       <div class="term-header__left">
-        <span class="term-header__title">Web 终端</span>
+        <span class="term-header__title">{{ t('terminal.title') }}</span>
         <StatusTag v-if="activeTab" :status="activeStatusType" :text="activeStatusText" />
       </div>
       <NSpace class="term-header__actions" size="small">
-        <NButton size="small" quaternary @click="copySelection" title="复制 (Ctrl+Shift+C)">
+        <NButton size="small" quaternary @click="copySelection" :title="t('terminal.buttons.copyTitle')">
           <template #icon><NIcon size="14"><CopyOutline /></NIcon></template>
-          复制
+          {{ t('terminal.buttons.copy') }}
         </NButton>
-        <NButton size="small" quaternary @click="pasteFromClipboard" title="粘贴 (Ctrl+Shift+V)">
+        <NButton size="small" quaternary @click="pasteFromClipboard" :title="t('terminal.buttons.pasteTitle')">
           <template #icon><NIcon size="14"><ClipboardOutline /></NIcon></template>
-          粘贴
+          {{ t('terminal.buttons.paste') }}
         </NButton>
-        <NButton size="small" quaternary @click="clearTerminal" title="清屏">
+        <NButton size="small" quaternary @click="clearTerminal" :title="t('terminal.buttons.clearTitle')">
           <template #icon><NIcon size="14"><TrashOutline /></NIcon></template>
-          清屏
+          {{ t('terminal.buttons.clear') }}
         </NButton>
-        <NButton size="small" quaternary @click="closeActiveTab" title="关闭当前标签">
-          关闭标签
+        <NButton size="small" quaternary @click="closeActiveTab" :title="t('terminal.buttons.closeTabTitle')">
+          {{ t('terminal.buttons.closeTab') }}
         </NButton>
         <NButton size="small" @click="quickBarOpen = !quickBarOpen">
           <template #icon>
@@ -450,7 +451,7 @@ onBeforeUnmount(() => {
               <component :is="quickBarOpen ? ChevronDownOutline : ChevronUpOutline" />
             </NIcon>
           </template>
-          快捷命令
+          {{ t('terminal.buttons.quickCommands') }}
         </NButton>
       </NSpace>
     </div>
@@ -466,28 +467,28 @@ onBeforeUnmount(() => {
         inline
         size="small"
       >
-        <NFormItem label="主机" path="host">
+        <NFormItem :label="t('terminal.form.host')" path="host">
           <NInput v-model:value="connForm.host" placeholder="localhost" style="width: 160px" />
         </NFormItem>
-        <NFormItem label="端口" path="port">
+        <NFormItem :label="t('terminal.form.port')" path="port">
           <NInputNumber v-model:value="connForm.port" :min="1" :max="65535" style="width: 100px" />
         </NFormItem>
-        <NFormItem label="用户名" path="username">
+        <NFormItem :label="t('terminal.form.username')" path="username">
           <NInput v-model:value="connForm.username" placeholder="root" style="width: 140px" />
         </NFormItem>
-        <NFormItem label="密码" path="password">
+        <NFormItem :label="t('terminal.form.password')" path="password">
           <NInput
             v-model:value="connForm.password"
             type="password"
             show-password-on="click"
-            placeholder="密码"
+            :placeholder="t('terminal.form.passwordPlaceholder')"
             style="width: 160px"
             @keyup.enter="handleConnect"
           />
         </NFormItem>
         <NFormItem>
           <NButton type="primary" :loading="connecting" @click="handleConnect">
-            连接
+            {{ t('terminal.buttons.connect') }}
           </NButton>
         </NFormItem>
       </NForm>
@@ -513,7 +514,7 @@ onBeforeUnmount(() => {
           <div class="term-wrap" :id="`term-${tab.id}`" />
         </NTabPane>
         <template #suffix>
-          <NButton size="small" quaternary circle @click="() => createTab()" title="新建终端标签">
+          <NButton size="small" quaternary circle @click="() => createTab()" :title="t('terminal.buttons.newTab')">
             <template #icon><NIcon size="14"><AddOutline /></NIcon></template>
           </NButton>
         </template>
@@ -522,7 +523,7 @@ onBeforeUnmount(() => {
 
     <!-- 快捷命令栏 -->
     <div v-if="quickBarOpen" class="term-quickbar">
-      <span class="term-quickbar__label">常用命令</span>
+      <span class="term-quickbar__label">{{ t('terminal.quickBarLabel') }}</span>
       <NSpace size="small" wrap>
         <NButton
           v-for="c in quickCommands"
@@ -652,7 +653,7 @@ onBeforeUnmount(() => {
 
 .term-quickbar__label {
   font-size: var(--fs-caption);
-  color: var(--faint);
+  color: var(--text-quaternary);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   flex-shrink: 0;

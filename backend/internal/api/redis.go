@@ -73,7 +73,7 @@ func (h *RedisHandler) ScanKeys(c *gin.Context) {
 
 	result, err := h.redisSvc.ScanKeys(id, pattern, cursor, count)
 	if err != nil {
-		common.Fail(c, common.CodeServerError, err.Error())
+		failDatabaseError(c, err)
 		return
 	}
 	common.Success(c, result)
@@ -95,7 +95,7 @@ func (h *RedisHandler) GetKey(c *gin.Context) {
 
 	result, err := h.redisSvc.GetKeyValue(id, key)
 	if err != nil {
-		common.Fail(c, common.CodeServerError, err.Error())
+		failDatabaseError(c, err)
 		return
 	}
 	common.Success(c, result)
@@ -120,7 +120,7 @@ func (h *RedisHandler) SetKey(c *gin.Context) {
 	}
 
 	if err := h.redisSvc.SetKeyValue(id, key, req); err != nil {
-		common.Fail(c, common.CodeServerError, err.Error())
+		failDatabaseError(c, err)
 		return
 	}
 	common.Success(c, nil)
@@ -148,7 +148,7 @@ func (h *RedisHandler) DeleteKey(c *gin.Context) {
 	}
 
 	if err := h.redisSvc.DeleteKey(id, key, req); err != nil {
-		common.Fail(c, common.CodeServerError, err.Error())
+		failDatabaseError(c, err)
 		return
 	}
 	common.Success(c, nil)
@@ -176,7 +176,7 @@ func (h *RedisHandler) ExpireKey(c *gin.Context) {
 	}
 
 	if err := h.redisSvc.ExpireKey(id, req.Key, req.TTL); err != nil {
-		common.Fail(c, common.CodeServerError, err.Error())
+		failDatabaseError(c, err)
 		return
 	}
 	common.Success(c, nil)
@@ -198,7 +198,7 @@ func (h *RedisHandler) ExecuteCLI(c *gin.Context) {
 
 	result, err := h.redisSvc.ExecuteCLI(id, req.Command, req.Args)
 	if err != nil {
-		common.Fail(c, common.CodeServerError, err.Error())
+		failDatabaseError(c, err)
 		return
 	}
 	common.Success(c, result)
@@ -214,7 +214,7 @@ func (h *RedisHandler) GetMemory(c *gin.Context) {
 	}
 	result, err := h.redisSvc.GetMemoryInfo(id)
 	if err != nil {
-		common.Fail(c, common.CodeServerError, err.Error())
+		failDatabaseError(c, err)
 		return
 	}
 	common.Success(c, result)
@@ -230,7 +230,7 @@ func (h *RedisHandler) GetInfo(c *gin.Context) {
 	}
 	result, err := h.redisSvc.GetFullInfo(id)
 	if err != nil {
-		common.Fail(c, common.CodeServerError, err.Error())
+		failDatabaseError(c, err)
 		return
 	}
 	common.Success(c, result)

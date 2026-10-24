@@ -19,6 +19,9 @@ var DefaultSettings = []Setting{
 	{Key: "language", Value: "zh-CN", Description: "语言"},
 	{Key: "theme", Value: "dark", Description: "主题"},
 	{Key: "security_entry", Value: "", Description: "安全入口"},
+	// 会话超时（分钟）：JWT 签发时以该值为准，缺省 120 分钟（与
+	// config.yaml 的 jwt.access_token_ttl=7200s 对齐）
+	{Key: "session_timeout", Value: "120", Description: "会话超时（分钟）"},
 	{Key: "smtp_host", Value: "", Description: "SMTP 主机"},
 	{Key: "smtp_port", Value: "587", Description: "SMTP 端口"},
 	{Key: "smtp_user", Value: "", Description: "SMTP 用户名"},

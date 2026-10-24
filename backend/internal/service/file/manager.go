@@ -359,7 +359,13 @@ func (m *Manager) Move(src, dst string) error {
 }
 
 // Delete 批量删除，目录递归删除
+// Delete 删除文件/目录——安全版：移入回收站（可恢复），永久删除走 PurgeRecycle
 func (m *Manager) Delete(paths []string) error {
+	return m.ToRecycle(paths)
+}
+
+// DeleteForever 永久删除（跳过回收站）
+func (m *Manager) DeleteForever(paths []string) error {
 	if len(paths) == 0 {
 		return fmt.Errorf("no paths provided")
 	}
@@ -368,8 +374,8 @@ func (m *Manager) Delete(paths []string) error {
 		if err != nil {
 			return err
 		}
-		if abs == m.root {
-			return fmt.Errorf("cannot delete root directory")
+		if abs == m.root || abs == filepath.Join(m.root, recycleDirName) {
+			return fmt.Errorf("cannot delete this directory")
 		}
 		if err := os.RemoveAll(abs); err != nil {
 			return fmt.Errorf("delete %s: %w", p, err)

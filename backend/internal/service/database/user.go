@@ -55,10 +55,24 @@ func (s *UserService) ListUsers(instanceID uint) ([]dto.UserInfo, error) {
 	return users, rows.Err()
 }
 
-// CreateUser 创建 MySQL 用户（参数化）
+// CreateUser 创建 MySQL 用户
+//
+// MySQL 的 CREATE USER 语法中 'user'@'host' 是标识符位置，JDBC 风格的 ? 占位符
+// 在这里不合法（驱动会把 ? 原样发给服务端，实测报 Error 1064 语法错误，
+// 导致「创建用户」按钮 100% 失败）。因此账号名走白名单校验 + 单引号引用，
+// 密码走完整转义后内联（MySQL 不支持为 CREATE USER 做服务端预编译）。
 func (s *UserService) CreateUser(instanceID uint, username, password, host string) error {
+	if err := validateMySQLIdentifier(username); err != nil {
+		return err
+	}
 	if host == "" {
 		host = "%"
+	}
+	if err := validateMySQLHost(host); err != nil {
+		return err
+	}
+	if password == "" {
+		return NewInvalidRequestError("密码不能为空")
 	}
 
 	conn, _, err := s.connectInstance(instanceID, "mysql")
@@ -67,9 +81,9 @@ func (s *UserService) CreateUser(instanceID uint, username, password, host strin
 	}
 	defer conn.Close()
 
-	// 使用参数化方式创建用户
-	query := "CREATE USER ?@? IDENTIFIED BY ?"
-	if _, err := conn.Exec(query, username, host, password); err != nil {
+	query := fmt.Sprintf("CREATE USER %s@%s IDENTIFIED BY %s",
+		quoteString(conn, username), quoteString(conn, host), quoteString(conn, password))
+	if _, err := conn.Exec(query); err != nil {
 		return fmt.Errorf("创建用户失败: %w", err)
 	}
 	return nil
@@ -93,7 +107,7 @@ func (s *UserService) DeleteUser(instanceID uint, username, host string) error {
 	}
 	defer conn.Close()
 
-	query := fmt.Sprintf("DROP USER '%s'@'%s'", username, host)
+	query := fmt.Sprintf("DROP USER %s@%s", quoteString(conn, username), quoteString(conn, host))
 	if _, err := conn.Exec(query); err != nil {
 		return fmt.Errorf("删除用户失败: %w", err)
 	}
@@ -120,7 +134,7 @@ func (s *UserService) GrantPrivileges(instanceID uint, username, host, dbName st
 	for _, p := range privileges {
 		upper := strings.ToUpper(strings.TrimSpace(p))
 		if !allowedPrivileges[upper] {
-			return fmt.Errorf("不支持的权限: %s（仅支持 ALL/SELECT/INSERT/UPDATE/DELETE）", p)
+			return NewInvalidRequestError("不支持的权限: %s（仅支持 ALL/SELECT/INSERT/UPDATE/DELETE）", p)
 		}
 		privList = append(privList, upper)
 	}
@@ -132,7 +146,11 @@ func (s *UserService) GrantPrivileges(instanceID uint, username, host, dbName st
 	defer conn.Close()
 
 	privStr := strings.Join(privList, ", ")
-	query := fmt.Sprintf("GRANT %s ON `%s`.* TO '%s'@'%s'", privStr, dbName, username, host)
+	// dbName 已过 validateMySQLIdentifier 白名单（仅字母数字下划线$），
+	// 用户名与 host 同样过白名单；仍统一走引用函数，防止白名单将来放宽后出漏洞。
+	query := fmt.Sprintf("GRANT %s ON %s.* TO %s@%s",
+		privStr, quoteMySQLIdentifier(dbName),
+		quoteString(conn, username), quoteString(conn, host))
 	if _, err := conn.Exec(query); err != nil {
 		return fmt.Errorf("授权失败: %w", err)
 	}
@@ -165,7 +183,8 @@ func (s *UserService) RevokePrivileges(instanceID uint, username, host, dbName s
 	}
 	defer conn.Close()
 
-	query := fmt.Sprintf("REVOKE ALL PRIVILEGES ON `%s`.* FROM '%s'@'%s'", dbName, username, host)
+	query := fmt.Sprintf("REVOKE ALL PRIVILEGES ON %s.* FROM %s@%s",
+		quoteMySQLIdentifier(dbName), quoteString(conn, username), quoteString(conn, host))
 	if _, err := conn.Exec(query); err != nil {
 		return fmt.Errorf("撤销权限失败: %w", err)
 	}

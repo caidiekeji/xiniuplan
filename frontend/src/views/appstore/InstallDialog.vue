@@ -1,15 +1,18 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import { useMessage } from 'naive-ui'
+import { useI18n } from 'vue-i18n'
+import { useMessage } from '@/composables/useMessage'
 import {
   NButton, NSpace, NIcon, NTag, NForm, NFormItem, NInput,
-  NSelect, NAlert, NSteps, NStep, NProgress, NModal
+  NSelect, NAlert, NSteps, NStep, NProgress
 } from 'naive-ui'
 import { CheckmarkCircleOutline } from '@vicons/ionicons5'
 import * as appstoreApi from '@/api/appstore'
 import type { App, EnvParam, InstallResult } from '@/api/appstore'
 import { getIconColor, categoryLabel, categoryTagType } from './shared'
+import { ContentModal } from '@/components'
 
+const { t } = useI18n()
 const message = useMessage()
 
 /* ==================== Props / Emits ==================== */
@@ -73,7 +76,7 @@ async function startInstall() {
     (p: EnvParam) => p.required && !envForm.value[p.key]
   )
   if (missing) {
-    message.warning(`请填写必填项: ${missing.label}`)
+    message.warning(t('appstore.installDialog.requiredWarning', { label: missing.label }))
     installStep.value = 1
     return
   }
@@ -81,11 +84,15 @@ async function startInstall() {
   installStep.value = 2
   installLoading.value = true
   installProgress.value = 10
-  installLogs.value = '正在准备安装环境...\n'
+  installLogs.value = t('appstore.installDialog.logPreparing') + '\n'
 
   try {
     installProgress.value = 30
-    installLogs.value += `正在拉取镜像 ${props.app.name}:${props.app.version}...\n`
+    installLogs.value +=
+      t('appstore.installDialog.logPulling', {
+        name: props.app.name,
+        version: props.app.version
+      }) + '\n'
 
     const res = await appstoreApi.installApp(
       props.app.key,
@@ -94,25 +101,26 @@ async function startInstall() {
     )
 
     installProgress.value = 80
-    installLogs.value += '正在配置容器和网络...\n'
+    installLogs.value += t('appstore.installDialog.logConfiguring') + '\n'
 
     await new Promise((r) => setTimeout(r, 800))
 
     installProgress.value = 100
-    installLogs.value += '安装完成！\n'
+    installLogs.value += t('appstore.installDialog.logDone') + '\n'
 
     installResult.value = res.data
     installLoading.value = false
 
     if (res.data.success) {
-      message.success(`${props.app.name} 安装成功`)
+      message.success(t('appstore.installDialog.successMessage', { name: props.app.name }))
       emit('success')
     } else {
-      installError.value = res.data.message || '安装失败'
+      installError.value = res.data.message || t('appstore.installDialog.installFailed')
     }
   } catch (e: any) {
-    installError.value = e.message || '安装失败'
-    installLogs.value += `错误: ${e.message || '未知错误'}\n`
+    installError.value = e.message || t('appstore.installDialog.installFailed')
+    installLogs.value +=
+      t('appstore.installDialog.logError', { error: e.message || t('appstore.installDialog.unknownError') }) + '\n'
     installLoading.value = false
   }
 }
@@ -121,26 +129,25 @@ async function copyPassword() {
   if (!installResult.value?.initial_password) return
   try {
     await navigator.clipboard.writeText(installResult.value.initial_password)
-    message.success('密码已复制到剪贴板')
+    message.success(t('appstore.installDialog.passwordCopied'))
   } catch {
-    message.error('复制失败，请手动复制')
+    message.error(t('appstore.installDialog.copyFailed'))
   }
 }
 </script>
 
 <template>
-  <NModal
+  <ContentModal
     :show="visible"
     :mask-closable="false"
-    preset="card"
-    :title="app ? `安装 ${app.name}` : '安装应用'"
-    :style="{ width: 'min(640px, 92vw)' }"
+    :title="app ? t('appstore.installDialog.title', { name: app.name }) : t('appstore.installDialog.titleNoApp')"
+    size="md"
     @update:show="(v: boolean) => { if (!v) closeModal() }"
   >
     <NSteps :current="installStep" class="install-steps">
-      <NStep title="确认信息" description="查看应用详情" />
-      <NStep title="配置参数" description="设置环境变量" />
-      <NStep title="安装中" description="等待部署完成" />
+      <NStep :title="t('appstore.installDialog.confirmTitle')" :description="t('appstore.installDialog.confirmDesc')" />
+      <NStep :title="t('appstore.installDialog.configTitle')" :description="t('appstore.installDialog.configDesc')" />
+      <NStep :title="t('appstore.installDialog.installingTitle')" :description="t('appstore.installDialog.installingDesc')" />
     </NSteps>
 
     <!-- 步骤1: 应用信息确认 -->
@@ -151,9 +158,11 @@ async function copyPassword() {
         </div>
         <div class="install-info__body">
           <div class="install-info__name">{{ app.name }}</div>
-          <div class="install-info__version mono">版本 v{{ app.version }}</div>
+          <div class="install-info__version mono">
+            {{ t('appstore.installDialog.version', { version: 'v' + app.version }) }}
+          </div>
           <NTag size="small" bordered :type="categoryTagType(app.category) as any">
-            {{ categoryLabel(app.category) }}
+            {{ categoryLabel(t, app.category) }}
           </NTag>
         </div>
       </div>
@@ -161,22 +170,22 @@ async function copyPassword() {
       <div class="install-info__desc">{{ app.description }}</div>
 
       <div v-if="app.resources" class="install-info__resources">
-        <div class="install-info__resources-title">最低资源要求</div>
+        <div class="install-info__resources-title">{{ t('appstore.installDialog.minResources') }}</div>
         <NSpace>
           <NTag v-if="app.resources.memory" size="small" bordered type="info">
-            内存: {{ app.resources.memory }}
+            {{ t('appstore.installDialog.memory', { value: app.resources.memory }) }}
           </NTag>
           <NTag v-if="app.resources.disk" size="small" bordered type="info">
-            磁盘: {{ app.resources.disk }}
+            {{ t('appstore.installDialog.disk', { value: app.resources.disk }) }}
           </NTag>
           <NTag v-if="app.resources.cpu" size="small" bordered type="info">
-            CPU: {{ app.resources.cpu }}
+            {{ t('appstore.installDialog.cpu', { value: app.resources.cpu }) }}
           </NTag>
         </NSpace>
       </div>
 
       <div v-if="app.ports && app.ports.length > 0" class="install-info__ports">
-        <span class="install-info__label">暴露端口:</span>
+        <span class="install-info__label">{{ t('appstore.installDialog.exposedPorts') }}</span>
         <span class="mono">{{ (app.ports || []).join(', ') }}</span>
       </div>
     </div>
@@ -194,29 +203,29 @@ async function copyPassword() {
               v-model:value="envForm[param.key]"
               type="password"
               show-password-on="click"
-              :placeholder="param.placeholder || `请输入${param.label}`"
+              :placeholder="param.placeholder || t('appstore.installDialog.inputPlaceholder', { label: param.label })"
             />
           </template>
           <template v-else-if="param.type === 'number'">
             <NInput
               v-model:value="envForm[param.key]"
-              :placeholder="param.placeholder || `请输入${param.label}`"
+              :placeholder="param.placeholder || t('appstore.installDialog.inputPlaceholder', { label: param.label })"
             />
           </template>
           <template v-else-if="param.type === 'select'">
             <NSelect
               v-model:value="envForm[param.key]"
               :options="param.options || []"
-              :placeholder="param.placeholder || `请选择${param.label}`"
+              :placeholder="param.placeholder || t('appstore.installDialog.selectPlaceholder', { label: param.label })"
             />
           </template>
           <template v-else>
             <NInput
               v-model:value="envForm[param.key]"
-              :placeholder="param.placeholder || `请输入${param.label}`"
+              :placeholder="param.placeholder || t('appstore.installDialog.inputPlaceholder', { label: param.label })"
             />
           </template>
-          <div v-if="param.description" class="form-hint">{{ param.description }}</div>
+          <div v-if="param.description" class="param-hint">{{ param.description }}</div>
         </NFormItem>
 
         <NAlert
@@ -224,7 +233,7 @@ async function copyPassword() {
           type="info"
           :show-icon="true"
         >
-          该应用无需配置环境参数，可直接安装
+          {{ t('appstore.installDialog.noEnv') }}
         </NAlert>
       </NForm>
     </div>
@@ -239,27 +248,27 @@ async function copyPassword() {
       />
 
       <div v-if="installLoading" class="install-logs">
-        <div class="install-logs__title">安装日志</div>
+        <div class="install-logs__title">{{ t('appstore.installDialog.logsTitle') }}</div>
         <pre class="install-logs__content mono">{{ installLogs }}</pre>
       </div>
 
       <!-- 安装成功 -->
       <div v-if="installResult && installResult.success" class="install-success">
         <NIcon :size="48" class="install-success__icon"><CheckmarkCircleOutline /></NIcon>
-        <div class="install-success__title">安装成功</div>
+        <div class="install-success__title">{{ t('appstore.installDialog.successTitle') }}</div>
         <div v-if="installResult.access_url" class="install-success__item">
-          <span class="install-success__label">访问地址:</span>
-          <a :href="installResult.access_url" target="_blank" class="mono">
+          <span class="install-success__label">{{ t('appstore.installDialog.accessUrl') }}</span>
+          <a :href="installResult.access_url" target="_blank" rel="noopener noreferrer" class="mono">
             {{ installResult.access_url }}
           </a>
         </div>
         <div v-if="installResult.initial_password" class="install-success__item">
-          <span class="install-success__label">初始密码:</span>
+          <span class="install-success__label">{{ t('appstore.installDialog.initialPassword') }}</span>
           <span class="mono install-success__password">{{ installResult.initial_password }}</span>
-          <NButton size="tiny" text @click="copyPassword">复制</NButton>
+          <NButton size="tiny" text @click="copyPassword">{{ t('appstore.installDialog.copy') }}</NButton>
         </div>
         <div v-if="installResult.container_id" class="install-success__item">
-          <span class="install-success__label">容器ID:</span>
+          <span class="install-success__label">{{ t('appstore.installDialog.containerId') }}</span>
           <span class="mono">{{ installResult.container_id.substring(0, 12) }}</span>
         </div>
       </div>
@@ -274,23 +283,23 @@ async function copyPassword() {
     <template #footer>
       <NSpace justify="end">
         <NButton v-if="installStep < 2 || (installStep === 2 && !installLoading)" @click="closeModal">
-          {{ installStep === 2 && installResult?.success ? '完成' : '取消' }}
+          {{ installStep === 2 && installResult?.success ? t('appstore.installDialog.done') : t('appstore.installDialog.cancel') }}
         </NButton>
-        <NButton v-if="installStep === 0" type="primary" @click="goToStep(1)">下一步</NButton>
+        <NButton v-if="installStep === 0" type="primary" @click="goToStep(1)">{{ t('appstore.installDialog.next') }}</NButton>
         <template v-if="installStep === 1">
-          <NButton @click="installStep = 0">上一步</NButton>
-          <NButton type="primary" @click="startInstall">开始安装</NButton>
+          <NButton @click="installStep = 0">{{ t('appstore.installDialog.prev') }}</NButton>
+          <NButton type="primary" @click="startInstall">{{ t('appstore.installDialog.start') }}</NButton>
         </template>
         <NButton
           v-if="installStep === 2 && installResult?.success"
           type="primary"
           @click="closeModal(); $emit('success')"
         >
-          查看已安装
+          {{ t('appstore.installDialog.viewInstalled') }}
         </NButton>
       </NSpace>
     </template>
-  </NModal>
+  </ContentModal>
 </template>
 
 <style scoped>
@@ -337,7 +346,7 @@ async function copyPassword() {
 
 .install-info__version {
   font-size: var(--fs-caption);
-  color: var(--faint);
+  color: var(--text-quaternary);
   margin-bottom: var(--space-2);
 }
 
@@ -355,7 +364,7 @@ async function copyPassword() {
 
 .install-info__resources-title {
   font-size: var(--fs-caption);
-  color: var(--faint);
+  color: var(--text-quaternary);
   margin-bottom: var(--space-2);
   text-transform: uppercase;
   letter-spacing: 0.03em;
@@ -367,13 +376,14 @@ async function copyPassword() {
 }
 
 .install-info__label {
-  color: var(--faint);
+  color: var(--text-quaternary);
   margin-right: var(--space-2);
 }
 
-.form-hint {
+/* 参数说明：与全局 .form-hint 间距不同（这里紧贴描述文字），单独命名 */
+.param-hint {
   font-size: var(--fs-caption);
-  color: var(--faint);
+  color: var(--text-quaternary);
   margin-top: var(--space-1);
 }
 
@@ -435,7 +445,7 @@ async function copyPassword() {
 }
 
 .install-success__label {
-  color: var(--faint);
+  color: var(--text-quaternary);
 }
 
 .install-success__password {

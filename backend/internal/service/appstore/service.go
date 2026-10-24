@@ -235,6 +235,112 @@ func (s *Service) InstallApp(key string, sourceID uint, envParams map[string]str
 	return installed, nil
 }
 
+// UpgradeApp 升级已安装应用（A-005）：
+// 流程：对比源版本与已装版本 → compose down 保留数据卷 → 用新版应用定义重渲染 compose（沿用原环境变量）→ compose up -d → 更新记录
+func (s *Service) UpgradeApp(key string) (*model.InstalledApp, error) {
+	var installed model.InstalledApp
+	if err := s.db.Where("`key` = ?", key).First(&installed).Error; err != nil {
+		return nil, fmt.Errorf("应用 %s 未安装", key)
+	}
+
+	// 1. 从已装记录的源（或任意启用源）获取新版定义
+	appDef, _, err := s.sourceSvc.FindApp(key)
+	if err != nil {
+		return nil, fmt.Errorf("获取新版应用定义失败: %w", err)
+	}
+	if appDef.Version == installed.Version {
+		return nil, fmt.Errorf("已是最新版本 %s，无需升级", installed.Version)
+	}
+
+	// 2. 解析原环境参数（升级时沿用，避免丢配置）
+	envParams := map[string]string{}
+	if installed.EnvParams != "" {
+		_ = json.Unmarshal([]byte(installed.EnvParams), &envParams)
+	}
+
+	// 3. 停止旧容器（保留数据卷）
+	// 注意：cancel 必须在 Down 之后再调用。原代码在 Down 之前就 cancel，
+	// 导致 ctx 立即失效、compose down 必然失败 —— 旧容器没停就覆盖
+	// compose 文件再 up，会导致新旧容器同时在跑、数据卷冲突。
+	downCtx, downCancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer downCancel()
+	if err := dockerpkg.Down(downCtx, installed.InstallPath); err != nil {
+		return nil, fmt.Errorf("停止旧容器失败: %w", err)
+	}
+
+	// 4. 用新版定义覆盖安装目录（保留 data/ 等本地数据目录）
+	appDir, err := s.sourceSvc.FindAppDir(key)
+	if err != nil {
+		return nil, fmt.Errorf("获取新版应用目录失败: %w", err)
+	}
+	// 仅覆盖定义文件与 compose 模板，不清空整个目录以保住运行时数据
+	entries, err := os.ReadDir(appDir)
+	if err != nil {
+		return nil, fmt.Errorf("read new app dir: %w", err)
+	}
+	skip := map[string]bool{"data": true, "volumes": true, "docker-compose.yml": true}
+	for _, e := range entries {
+		if skip[e.Name()] {
+			continue
+		}
+		src := filepath.Join(appDir, e.Name())
+		dst := filepath.Join(installed.InstallPath, e.Name())
+		if e.IsDir() {
+			os.RemoveAll(dst)
+			if err := copyDir(src, dst); err != nil {
+				return nil, fmt.Errorf("copy %s: %w", e.Name(), err)
+			}
+		} else {
+			in, err := os.Open(src)
+			if err != nil {
+				return nil, err
+			}
+			out, err := os.Create(dst)
+			if err != nil {
+				in.Close()
+				return nil, err
+			}
+			_, _ = io.Copy(out, in)
+			in.Close()
+			out.Close()
+		}
+	}
+
+	// 5. 重渲染 compose（沿用原环境变量 + 补充新版新增必填项默认值）
+	for _, p := range appDef.EnvParams {
+		if _, ok := envParams[p.Key]; !ok && p.Default != "" {
+			envParams[p.Key] = p.Default
+		}
+	}
+	composePath := filepath.Join(installed.InstallPath, "docker-compose.yml")
+	if err := renderComposeFile(composePath, envParams); err != nil {
+		return nil, fmt.Errorf("render compose file: %w", err)
+	}
+
+	// 6. 启动新版容器
+	upCtx, upCancel := context.WithTimeout(context.Background(), 180*time.Second)
+	defer upCancel()
+	status := "installed"
+	if err := dockerpkg.Up(upCtx, installed.InstallPath); err != nil {
+		status = "error"
+	} else {
+		status = "running"
+	}
+
+	// 7. 更新记录
+	envParamsJSON, _ := json.Marshal(envParams)
+	installed.Version = appDef.Version
+	installed.Status = status
+	installed.EnvParams = string(envParamsJSON)
+	if err := s.db.Save(&installed).Error; err != nil {
+		return nil, fmt.Errorf("update install record: %w", err)
+	}
+	if status == "error" {
+		return &installed, fmt.Errorf("升级完成但容器启动失败，请查看日志回滚")
+	}
+	return &installed, nil
+}
+
 // UninstallApp 卸载应用
 func (s *Service) UninstallApp(key string) error {
 	// 1. 查找已安装记录
@@ -270,9 +376,72 @@ func (s *Service) ListInstalled() ([]dto.InstalledAppResponse, error) {
 	responses := make([]dto.InstalledAppResponse, 0, len(apps))
 	for _, app := range apps {
 		containerStatus := s.getContainerStatus(app.InstallPath)
-		responses = append(responses, toInstalledResponse(&app, containerStatus))
+		resp := toInstalledResponse(&app, containerStatus)
+		// 容器 ID 与映射端口：前端「打开」「日志」按钮依赖这两个字段，
+		// 此前响应里从不提供，两个按钮永远失效（2026-10-23 闭环审计）
+		resp.ContainerID, resp.HostPort = s.resolveContainerRuntime(app.InstallPath)
+		responses = append(responses, resp)
 	}
 	return responses, nil
+}
+
+// resolveContainerRuntime 通过 compose ps 解析容器 ID 与宿主机映射端口。
+// 输出为每行一个 JSON 对象（docker compose ps --format json）。
+func (s *Service) resolveContainerRuntime(installPath string) (containerID string, hostPort int) {
+	if installPath == "" {
+		return "", 0
+	}
+	if _, err := os.Stat(filepath.Join(installPath, "docker-compose.yml")); err != nil {
+		return "", 0
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	output, err := dockerpkg.Ps(ctx, installPath)
+	if err != nil {
+		return "", 0
+	}
+
+	for _, line := range strings.Split(output, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "{") {
+			continue
+		}
+		var entry map[string]any
+		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+			continue
+		}
+		if containerID == "" {
+			if id, ok := entry["ID"].(string); ok && id != "" {
+				containerID = id
+			} else if id, ok := entry["Id"].(string); ok && id != "" {
+				containerID = id
+			}
+		}
+		if hostPort == 0 {
+			if pubs, ok := entry["Publishers"].([]any); ok {
+				for _, p := range pubs {
+					pm, ok := p.(map[string]any)
+					if !ok {
+						continue
+					}
+					proto, _ := pm["Protocol"].(string)
+					if proto != "" && proto != "tcp" {
+						continue
+					}
+					if port, ok := pm["PublishedPort"].(float64); ok && port > 0 {
+						hostPort = int(port)
+						break
+					}
+				}
+			}
+		}
+		if containerID != "" && hostPort != 0 {
+			break
+		}
+	}
+	return containerID, hostPort
 }
 
 // GetInstallStatus 检查应用安装状态
@@ -331,6 +500,8 @@ func toInstalledResponse(app *model.InstalledApp, containerStatus string) dto.In
 		envParams = make(map[string]string)
 	}
 	return dto.InstalledAppResponse{
+		// Success 与安装接口保持同一口径：状态非 error 即视为成功
+		Success:         app.Status != "error",
 		ID:              app.ID,
 		Key:             app.Key,
 		Name:            app.Name,

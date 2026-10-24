@@ -1,10 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch, nextTick, h } from 'vue'
-import { useMessage } from 'naive-ui'
-import {
-  NButton, NSpace, NIcon, NEmpty, NTag, NInput, NSelect,
-  NFormItem, NSwitch, NTabs, NTabPane
-} from 'naive-ui'
+import { useI18n } from 'vue-i18n'
+import { useMessage } from '@/composables/useMessage'
+import { NButton, NIcon, NTag, NInput, NSelect, NFormItem, NSwitch, NTabs, NTabPane } from 'naive-ui'
 import type { DataTableColumns } from 'naive-ui'
 import {
   AddOutline, RefreshOutline, PencilOutline, PowerOutline, TrashOutline
@@ -18,11 +16,9 @@ import type {
 import AppStoreTab from './AppStoreTab.vue'
 import InstalledTab from './InstalledTab.vue'
 import InstallDialog from './InstallDialog.vue'
-import {
-  monoEl, iconBtn, btnGroup, formatTime,
-  sourceTypeLabel, sourceTypeTagType
-} from './shared'
+import { iconBtn, btnGroup, formatTime, sourceTypeLabel, sourceTypeTagType } from './shared'
 
+const { t } = useI18n()
 const message = useMessage()
 
 /* ==================== Tab 状态 ==================== */
@@ -40,7 +36,7 @@ async function loadSources() {
     const res = await appstoreApi.getAppSources()
     sources.value = Array.isArray(res.data) ? res.data : []
   } catch (e: any) {
-    message.error(e.message || '加载源列表失败')
+    message.error(e.message || t('appstore.loadSourcesFailed'))
     sources.value = []
   } finally {
     sourcesLoading.value = false
@@ -80,11 +76,11 @@ const sourceForm = ref<AppSourceInput>({
   enabled: true
 })
 
-const sourceTypeOptions = [
-  { label: '官方', value: 'official' },
-  { label: '社区', value: 'community' },
-  { label: '私有', value: 'private' }
-]
+const sourceTypeOptions = computed(() => [
+  { label: t('appstore.sourceTypes.official'), value: 'official' },
+  { label: t('appstore.sourceTypes.community'), value: 'community' },
+  { label: t('appstore.sourceTypes.private'), value: 'private' }
+])
 
 const hasOfficialSource = computed(() =>
   sources.value.some((s) => s.type === 'official' && s.id !== editingSource.value?.id)
@@ -110,19 +106,19 @@ function openEditSource(row: AppSource) {
 
 async function submitSource() {
   if (!sourceForm.value.name.trim()) {
-    message.warning('请输入源名称')
+    message.warning(t('appstore.validate.nameRequired'))
     return
   }
   if (sourceForm.value.type === 'community' && !sourceForm.value.url?.trim()) {
-    message.warning('请输入社区源 URL')
+    message.warning(t('appstore.validate.communityUrlRequired'))
     return
   }
   if (sourceForm.value.type === 'private' && !sourceForm.value.path?.trim()) {
-    message.warning('请输入私有源本地路径')
+    message.warning(t('appstore.validate.privatePathRequired'))
     return
   }
   if (sourceForm.value.type === 'official' && hasOfficialSource.value) {
-    message.warning('官方源只能存在一个，请先修改或删除现有官方源')
+    message.warning(t('appstore.validate.officialOnlyOnce'))
     return
   }
 
@@ -138,15 +134,15 @@ async function submitSource() {
 
     if (editingSource.value) {
       await appstoreApi.updateAppSource(editingSource.value.id, data)
-      message.success('源已更新')
+      message.success(t('appstore.messages.sourceUpdated'))
     } else {
       await appstoreApi.createAppSource(data)
-      message.success('源已添加')
+      message.success(t('appstore.messages.sourceAdded'))
     }
     sourceModalVisible.value = false
     loadSources()
   } catch (e: any) {
-    message.error(e.message || '操作失败')
+    message.error(e.message || t('appstore.messages.actionFailed'))
   } finally {
     sourceModalLoading.value = false
   }
@@ -157,10 +153,14 @@ async function submitSource() {
 async function toggleSource(row: AppSource) {
   try {
     await appstoreApi.toggleAppSource(row.id)
-    message.success(row.enabled ? `已禁用「${row.name}」` : `已启用「${row.name}」`)
+    message.success(
+      row.enabled
+        ? t('appstore.messages.sourceDisabled', { name: row.name })
+        : t('appstore.messages.sourceEnabled', { name: row.name })
+    )
     loadSources()
   } catch (e: any) {
-    message.error(e.message || '操作失败')
+    message.error(e.message || t('appstore.messages.actionFailed'))
   }
 }
 
@@ -171,11 +171,13 @@ async function syncSource(row: AppSource) {
   try {
     const res = await appstoreApi.syncAppSource(row.id)
     const r = res.data
-    message.success(`同步完成：新增 ${r.added} / 更新 ${r.updated} / 删除 ${r.deleted}`)
+    message.success(
+      t('appstore.messages.syncDone', { added: r.added, updated: r.updated, deleted: r.deleted })
+    )
     loadSources()
     if (activeTab.value === 'store') appStoreTabRef.value?.loadApps()
   } catch (e: any) {
-    message.error(e.message || '同步失败')
+    message.error(e.message || t('appstore.messages.syncFailed'))
   } finally {
     syncingId.value = null
   }
@@ -189,7 +191,7 @@ const targetSource = ref<AppSource | null>(null)
 
 function confirmDeleteSource(row: AppSource) {
   if (row.type === 'official') {
-    message.warning('官方源不可删除')
+    message.warning(t('appstore.messages.officialNoDelete'))
     return
   }
   targetSource.value = row
@@ -201,11 +203,11 @@ async function doDeleteSource() {
   deleteLoading.value = true
   try {
     await appstoreApi.deleteAppSource(targetSource.value.id)
-    message.success(`「${targetSource.value.name}」已删除`)
+    message.success(t('appstore.messages.sourceDeleted', { name: targetSource.value.name }))
     deleteConfirm.value = false
     loadSources()
   } catch (e: any) {
-    message.error(e.message || '删除失败')
+    message.error(e.message || t('appstore.messages.deleteFailed'))
   } finally {
     deleteLoading.value = false
   }
@@ -213,10 +215,10 @@ async function doDeleteSource() {
 
 /* --- 源列表 DataTable 列 --- */
 
-const sourceColumns: DataTableColumns = [
-  { title: '源名称', key: 'name', width: 180 },
+const sourceColumns = computed<DataTableColumns>(() => [
+  { title: t('appstore.columns.name'), key: 'name', width: 180 },
   {
-    title: '类型', key: 'type', width: 100,
+    title: t('appstore.columns.type'), key: 'type', width: 100,
     render: (row: any) =>
       h(
         NTag,
@@ -225,11 +227,11 @@ const sourceColumns: DataTableColumns = [
           bordered: false,
           type: sourceTypeTagType(row.type as AppSourceType) as any
         },
-        { default: () => sourceTypeLabel(row.type as AppSourceType) }
+        { default: () => sourceTypeLabel(t, row.type as AppSourceType) }
       )
   },
   {
-    title: 'URL / 路径', key: 'url',
+    title: t('appstore.columns.url'), key: 'url',
     render: (row: any) =>
       h(
         'span',
@@ -238,44 +240,44 @@ const sourceColumns: DataTableColumns = [
       )
   },
   {
-    title: '状态', key: 'enabled', width: 100,
+    title: t('appstore.columns.status'), key: 'enabled', width: 100,
     render: (row: any) =>
       h(StatusTag, {
         status: (row.enabled ? 'running' : 'stopped') as StatusType,
-        text: row.enabled ? '启用' : '禁用'
+        text: row.enabled ? t('appstore.status.enabled') : t('appstore.status.disabled')
       })
   },
   {
-    title: '最后同步', key: 'last_sync_at', width: 170,
+    title: t('appstore.columns.lastSync'), key: 'last_sync_at', width: 170,
     render: (row: any) => formatTime(row.last_sync_at)
   },
   {
-    title: '操作', key: 'actions', width: 280,
+    title: t('appstore.columns.actions'), key: 'actions', width: 280,
     render: (row: any) =>
       btnGroup([
         iconBtn({
-          text: '同步', icon: RefreshOutline,
+          text: t('appstore.actions.sync'), icon: RefreshOutline,
           loading: syncingId.value === row.id,
           onClick: () => syncSource(row)
         }),
         iconBtn({
-          text: row.enabled ? '禁用' : '启用',
+          text: row.enabled ? t('appstore.actions.disable') : t('appstore.actions.enable'),
           icon: PowerOutline,
           type: row.enabled ? 'warning' : 'success',
           onClick: () => toggleSource(row)
         }),
         iconBtn({
-          text: '编辑', icon: PencilOutline,
+          text: t('appstore.actions.edit'), icon: PencilOutline,
           onClick: () => openEditSource(row)
         }),
         iconBtn({
-          text: '删除', icon: TrashOutline, type: 'error',
+          text: t('appstore.actions.delete'), icon: TrashOutline, type: 'error',
           disabled: row.type === 'official',
           onClick: () => confirmDeleteSource(row)
         })
       ])
   }
-]
+])
 
 /* ==================== 生命周期 ==================== */
 
@@ -301,10 +303,10 @@ watch(activeTab, async (tab) => {
 </script>
 
 <template>
-  <PageCard title="应用商店" subtitle="一键部署常用 Web 应用 · 容器化运行 · 环境参数可视化配置">
+  <PageCard :title="t('appstore.pageTitle')" :subtitle="t('appstore.pageSubtitle')">
     <NTabs v-model:value="activeTab" type="line" animated>
       <!-- Tab 1: 应用商店 -->
-      <NTabPane name="store" tab="应用商店">
+      <NTabPane name="store" :tab="t('appstore.tabs.store')">
         <AppStoreTab
           ref="appStoreTabRef"
           :sources="sources"
@@ -314,7 +316,7 @@ watch(activeTab, async (tab) => {
       </NTabPane>
 
       <!-- Tab 2: 已安装 -->
-      <NTabPane name="installed" tab="已安装">
+      <NTabPane name="installed" :tab="t('appstore.tabs.installed')">
         <InstalledTab
           ref="installedTabRef"
           :active="activeTab === 'installed'"
@@ -323,10 +325,10 @@ watch(activeTab, async (tab) => {
       </NTabPane>
 
       <!-- Tab 3: 源管理 -->
-      <NTabPane name="sources" tab="源管理">
+      <NTabPane name="sources" :tab="t('appstore.tabs.sources')">
         <div class="tab-toolbar tab-toolbar--end">
           <NButton type="primary" @click="openAddSource">
-            <template #icon><NIcon><AddOutline /></NIcon></template>添加源
+            <template #icon><NIcon><AddOutline /></NIcon></template>{{ t('appstore.addSource') }}
           </NButton>
         </div>
 
@@ -350,20 +352,20 @@ watch(activeTab, async (tab) => {
     <!-- 添加/编辑源对话框 -->
     <ModalForm
       v-model:show="sourceModalVisible"
-      :title="editingSource ? '编辑源' : '添加源'"
+      :title="editingSource ? t('appstore.form.editTitle') : t('appstore.form.addTitle')"
       :loading="sourceModalLoading"
       :width="520"
       @submit="submitSource"
     >
-      <NFormItem label="源名称" required>
-        <NInput v-model:value="sourceForm.name" placeholder="请输入源名称，如：官方应用源" />
+      <NFormItem :label="t('appstore.form.nameLabel')" required>
+        <NInput v-model:value="sourceForm.name" :placeholder="t('appstore.form.namePlaceholder')" />
       </NFormItem>
 
-      <NFormItem label="类型" required>
+      <NFormItem :label="t('appstore.form.typeLabel')" required>
         <NSelect
           v-model:value="sourceForm.type"
           :options="sourceTypeOptions"
-          placeholder="请选择源类型"
+          :placeholder="t('appstore.form.typePlaceholder')"
         />
       </NFormItem>
 
@@ -371,11 +373,11 @@ watch(activeTab, async (tab) => {
         <NInput v-model:value="sourceForm.url" placeholder="https://example.com/apps.json" />
       </NFormItem>
 
-      <NFormItem v-if="sourceForm.type === 'private'" label="本地路径" required>
+      <NFormItem v-if="sourceForm.type === 'private'" :label="t('appstore.form.pathLabel')" required>
         <NInput v-model:value="sourceForm.path" placeholder="/path/to/apps/directory" />
       </NFormItem>
 
-      <NFormItem label="启用">
+      <NFormItem :label="t('appstore.form.enabledLabel')">
         <NSwitch v-model:value="sourceForm.enabled" />
       </NFormItem>
     </ModalForm>
@@ -383,10 +385,10 @@ watch(activeTab, async (tab) => {
     <!-- 删除源确认 -->
     <ConfirmDialog
       v-model:show="deleteConfirm"
-      title="删除源"
-      :content="`确定要删除源「${targetSource?.name}」吗？该源下的应用将不再可用，此操作不可恢复。`"
+      :title="t('appstore.deleteDialog.title')"
+      :content="t('appstore.deleteDialog.content', { name: targetSource?.name })"
       type="error"
-      confirm-text="删除"
+      :confirm-text="t('appstore.deleteDialog.confirm')"
       :loading="deleteLoading"
       @confirm="doDeleteSource"
     />

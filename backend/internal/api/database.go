@@ -1,6 +1,8 @@
 package api
 
 import (
+	"errors"
+	"fmt"
 	"strconv"
 
 	"cloudpivot/internal/common"
@@ -13,12 +15,27 @@ import (
 	"gorm.io/gorm"
 )
 
+// failDatabaseError 统一的数据库模块错误出口。
+//
+// service 层用 dbsvc.ErrUnsupportedType 标记「实例类型不支持当前操作」、
+// dbsvc.ErrInvalidRequest 标记「参数不合法」这两类客户端语义错误，
+// 这里翻译成 400 而不是 500 —— 否则前端会弹出系统异常提示，掩盖真实原因
+// （用户对实例类型用错了功能入口，或输入了非法权限/标识符）。
+func failDatabaseError(c *gin.Context, err error) {
+	if errors.Is(err, dbsvc.ErrUnsupportedType) || errors.Is(err, dbsvc.ErrInvalidRequest) {
+		common.Fail(c, common.CodeParamError, err.Error())
+		return
+	}
+	common.Fail(c, common.CodeServerError, err.Error())
+}
+
 // DatabaseHandler 数据库管理 API Handler
 type DatabaseHandler struct {
 	instanceSvc *dbsvc.InstanceService
 	databaseSvc *dbsvc.DatabaseService
 	userSvc     *dbsvc.UserService
 	sqlSvc      *dbsvc.SQLService
+	tuningSvc   *dbsvc.TuningService
 }
 
 // NewDatabaseHandler 创建数据库管理 Handler
@@ -28,6 +45,7 @@ func NewDatabaseHandler(db *gorm.DB) *DatabaseHandler {
 		databaseSvc: dbsvc.NewDatabaseService(db),
 		userSvc:     dbsvc.NewUserService(db),
 		sqlSvc:      dbsvc.NewSQLService(db),
+		tuningSvc:   dbsvc.NewTuningService(db),
 	}
 }
 
@@ -65,6 +83,11 @@ func RegisterDatabaseRoutes(r *gin.RouterGroup) {
 	r.POST("/databases/:id/sql", middleware.RequirePermission(model.PermDatabaseUpdate), h.ExecuteSQL)
 	r.POST("/databases/:id/import", middleware.RequirePermission(model.PermDatabaseUpdate), h.ImportSQL)
 	r.GET("/databases/:id/export", middleware.RequirePermission(model.PermDatabaseView), h.ExportSQL)
+
+	// 参数配置（DB-002）与状态监控（DB-004）
+	r.GET("/databases/:id/variables", middleware.RequirePermission(model.PermDatabaseView), h.ListVariables)
+	r.PUT("/databases/:id/variables", middleware.RequirePermission(model.PermDatabaseUpdate), h.UpdateVariable)
+	r.GET("/databases/:id/status", middleware.RequirePermission(model.PermDatabaseView), h.DBStatus)
 }
 
 // parseInstanceID 从路径参数解析实例 ID
@@ -81,7 +104,7 @@ func parseInstanceID(c *gin.Context) (uint, bool) {
 // parsePagination 解析分页参数
 func parsePagination(c *gin.Context) (int, int) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "10"))
 	return page, pageSize
 }
 
@@ -92,7 +115,7 @@ func (h *DatabaseHandler) ListInstances(c *gin.Context) {
 	page, pageSize := parsePagination(c)
 	instances, total, err := h.instanceSvc.ListInstances(page, pageSize)
 	if err != nil {
-		common.Fail(c, common.CodeServerError, "获取实例列表失败: "+err.Error())
+		failDatabaseError(c, fmt.Errorf("获取实例列表失败: %w", err))
 		return
 	}
 
@@ -114,7 +137,7 @@ func (h *DatabaseHandler) CreateInstance(c *gin.Context) {
 
 	instance, err := h.instanceSvc.CreateInstance(req)
 	if err != nil {
-		common.Fail(c, common.CodeServerError, err.Error())
+		failDatabaseError(c, err)
 		return
 	}
 	common.Success(c, toInstanceResponse(instance, ""))
@@ -130,7 +153,7 @@ func (h *DatabaseHandler) ImportInstance(c *gin.Context) {
 
 	instance, err := h.instanceSvc.ImportInstance(req)
 	if err != nil {
-		common.Fail(c, common.CodeServerError, err.Error())
+		failDatabaseError(c, err)
 		return
 	}
 	common.Success(c, toInstanceResponse(instance, ""))
@@ -140,7 +163,7 @@ func (h *DatabaseHandler) ImportInstance(c *gin.Context) {
 func (h *DatabaseHandler) DiscoverInstances(c *gin.Context) {
 	instances, err := h.instanceSvc.DiscoverInstances()
 	if err != nil {
-		common.Fail(c, common.CodeServerError, "发现数据库失败: "+err.Error())
+		failDatabaseError(c, fmt.Errorf("发现数据库失败: "+"%w", err))
 		return
 	}
 	common.Success(c, instances)
@@ -173,7 +196,7 @@ func (h *DatabaseHandler) DeleteInstance(c *gin.Context) {
 
 	cleanup := c.DefaultQuery("cleanup", "false") == "true"
 	if err := h.instanceSvc.DeleteInstance(id, cleanup); err != nil {
-		common.Fail(c, common.CodeServerError, "删除实例失败: "+err.Error())
+		failDatabaseError(c, fmt.Errorf("删除实例失败: "+"%w", err))
 		return
 	}
 	common.Success(c, nil)
@@ -186,7 +209,7 @@ func (h *DatabaseHandler) StartInstance(c *gin.Context) {
 		return
 	}
 	if err := h.instanceSvc.StartInstance(id); err != nil {
-		common.Fail(c, common.CodeServerError, err.Error())
+		failDatabaseError(c, err)
 		return
 	}
 	common.Success(c, nil)
@@ -199,7 +222,7 @@ func (h *DatabaseHandler) StopInstance(c *gin.Context) {
 		return
 	}
 	if err := h.instanceSvc.StopInstance(id); err != nil {
-		common.Fail(c, common.CodeServerError, err.Error())
+		failDatabaseError(c, err)
 		return
 	}
 	common.Success(c, nil)
@@ -212,7 +235,7 @@ func (h *DatabaseHandler) RestartInstance(c *gin.Context) {
 		return
 	}
 	if err := h.instanceSvc.RestartInstance(id); err != nil {
-		common.Fail(c, common.CodeServerError, err.Error())
+		failDatabaseError(c, err)
 		return
 	}
 	common.Success(c, nil)
@@ -228,7 +251,7 @@ func (h *DatabaseHandler) ListDatabases(c *gin.Context) {
 	}
 	dbs, err := h.databaseSvc.ListDatabases(id)
 	if err != nil {
-		common.Fail(c, common.CodeServerError, err.Error())
+		failDatabaseError(c, err)
 		return
 	}
 	common.Success(c, dbs)
@@ -246,7 +269,7 @@ func (h *DatabaseHandler) CreateDatabase(c *gin.Context) {
 		return
 	}
 	if err := h.databaseSvc.CreateDatabase(id, req.Name, req.Charset, req.Collation); err != nil {
-		common.Fail(c, common.CodeServerError, err.Error())
+		failDatabaseError(c, err)
 		return
 	}
 	common.Success(c, nil)
@@ -260,7 +283,7 @@ func (h *DatabaseHandler) DeleteDatabase(c *gin.Context) {
 	}
 	name := c.Param("name")
 	if err := h.databaseSvc.DeleteDatabase(id, name); err != nil {
-		common.Fail(c, common.CodeServerError, err.Error())
+		failDatabaseError(c, err)
 		return
 	}
 	common.Success(c, nil)
@@ -275,7 +298,7 @@ func (h *DatabaseHandler) ListTables(c *gin.Context) {
 	dbName := c.Param("name")
 	tables, err := h.databaseSvc.ListTables(id, dbName)
 	if err != nil {
-		common.Fail(c, common.CodeServerError, err.Error())
+		failDatabaseError(c, err)
 		return
 	}
 	common.Success(c, tables)
@@ -291,7 +314,7 @@ func (h *DatabaseHandler) GetTableStructure(c *gin.Context) {
 	tableName := c.Param("table")
 	structure, err := h.databaseSvc.GetTableStructure(id, dbName, tableName)
 	if err != nil {
-		common.Fail(c, common.CodeServerError, err.Error())
+		failDatabaseError(c, err)
 		return
 	}
 	common.Success(c, structure)
@@ -309,7 +332,7 @@ func (h *DatabaseHandler) ListTableData(c *gin.Context) {
 
 	data, err := h.databaseSvc.ListTableData(id, dbName, tableName, page, pageSize)
 	if err != nil {
-		common.Fail(c, common.CodeServerError, err.Error())
+		failDatabaseError(c, err)
 		return
 	}
 	common.Success(c, data)
@@ -325,7 +348,7 @@ func (h *DatabaseHandler) ListUsers(c *gin.Context) {
 	}
 	users, err := h.userSvc.ListUsers(id)
 	if err != nil {
-		common.Fail(c, common.CodeServerError, err.Error())
+		failDatabaseError(c, err)
 		return
 	}
 	common.Success(c, users)
@@ -343,7 +366,7 @@ func (h *DatabaseHandler) CreateUser(c *gin.Context) {
 		return
 	}
 	if err := h.userSvc.CreateUser(id, req.Username, req.Password, req.Host); err != nil {
-		common.Fail(c, common.CodeServerError, err.Error())
+		failDatabaseError(c, err)
 		return
 	}
 	common.Success(c, nil)
@@ -358,7 +381,7 @@ func (h *DatabaseHandler) DeleteUser(c *gin.Context) {
 	username := c.Param("username")
 	host := c.DefaultQuery("host", "%")
 	if err := h.userSvc.DeleteUser(id, username, host); err != nil {
-		common.Fail(c, common.CodeServerError, err.Error())
+		failDatabaseError(c, err)
 		return
 	}
 	common.Success(c, nil)
@@ -378,7 +401,7 @@ func (h *DatabaseHandler) GrantPrivileges(c *gin.Context) {
 	}
 	req.Username = username
 	if err := h.userSvc.GrantPrivileges(id, req.Username, req.Host, req.DBName, req.Privileges); err != nil {
-		common.Fail(c, common.CodeServerError, err.Error())
+		failDatabaseError(c, err)
 		return
 	}
 	common.Success(c, nil)
@@ -398,7 +421,7 @@ func (h *DatabaseHandler) RevokePrivileges(c *gin.Context) {
 		return
 	}
 	if err := h.userSvc.RevokePrivileges(id, username, host, dbName); err != nil {
-		common.Fail(c, common.CodeServerError, err.Error())
+		failDatabaseError(c, err)
 		return
 	}
 	common.Success(c, nil)
@@ -419,7 +442,7 @@ func (h *DatabaseHandler) ExecuteSQL(c *gin.Context) {
 	}
 	result, err := h.sqlSvc.ExecuteSQL(id, req.DBName, req.SQL, req.AllowDestructive)
 	if err != nil {
-		common.Fail(c, common.CodeServerError, err.Error())
+		failDatabaseError(c, err)
 		return
 	}
 	common.Success(c, result)
@@ -438,7 +461,7 @@ func (h *DatabaseHandler) ImportSQL(c *gin.Context) {
 	}
 	result, err := h.sqlSvc.ImportSQL(id, req.DBName, req.Content)
 	if err != nil {
-		common.Fail(c, common.CodeServerError, err.Error())
+		failDatabaseError(c, err)
 		return
 	}
 	common.Success(c, result)
@@ -459,7 +482,7 @@ func (h *DatabaseHandler) ExportSQL(c *gin.Context) {
 
 	sqlText, err := h.sqlSvc.ExportSQL(id, dbName, tableName)
 	if err != nil {
-		common.Fail(c, common.CodeServerError, "导出失败: "+err.Error())
+		failDatabaseError(c, fmt.Errorf("导出失败: "+"%w", err))
 		return
 	}
 
@@ -493,4 +516,59 @@ func toInstanceResponse(inst *model.DatabaseInstance, containerStatus string) dt
 		ContainerStatus: containerStatus,
 		CreatedAt:       inst.CreatedAt.Format("2006-01-02 15:04:05"),
 	}
+}
+
+// ListVariables GET /databases/:id/variables?search= - 参数列表（DB-002）
+func (h *DatabaseHandler) ListVariables(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		common.Fail(c, common.CodeParamError, "无效的实例 ID")
+		return
+	}
+	vars, err := h.tuningSvc.GetVariables(uint(id), c.Query("search"))
+	if err != nil {
+		failDatabaseError(c, fmt.Errorf("获取参数列表失败: "+"%w", err))
+		return
+	}
+	common.Success(c, vars)
+}
+
+// UpdateVariable PUT /databases/:id/variables - 修改参数（DB-002）
+func (h *DatabaseHandler) UpdateVariable(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		common.Fail(c, common.CodeParamError, "无效的实例 ID")
+		return
+	}
+	var req struct {
+		Name  string `json:"name" binding:"required"`
+		Value string `json:"value" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		common.Fail(c, common.CodeParamError, "参数错误: "+err.Error())
+		return
+	}
+	if err := h.tuningSvc.UpdateVariable(uint(id), req.Name, req.Value); err != nil {
+		failDatabaseError(c, fmt.Errorf("修改参数失败: "+"%w", err))
+		return
+	}
+	common.Success(c, gin.H{"updated": true})
+}
+
+// DBStatus GET /databases/:id/status - 实例状态监控（DB-004）
+func (h *DatabaseHandler) DBStatus(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		common.Fail(c, common.CodeParamError, "无效的实例 ID")
+		return
+	}
+	status, err := h.tuningSvc.GetStatus(uint(id))
+	if err != nil {
+		failDatabaseError(c, fmt.Errorf("获取实例状态失败: "+"%w", err))
+		return
+	}
+	common.Success(c, status)
 }

@@ -150,10 +150,12 @@ export function testAlertRule(id: number | string) {
 
 /* ==================== 通知渠道 API ==================== */
 
-export function getAlertChannels() {
+export function getAlertChannels(params?: { page?: number; pageSize?: number }) {
+  // 后端默认按 10 条分页，前端不传参时超过 10 条的渠道看不到
   return request<AlertChannelListData>({
     url: '/alert/channels',
-    method: 'get'
+    method: 'get',
+    params: { page: params?.page ?? 1, pageSize: params?.pageSize ?? 100 }
   })
 }
 

@@ -112,6 +112,12 @@ func buildServerBlock(serverNames, listen string, site *model.Site, accessLog, e
 	buf.WriteString(fmt.Sprintf("    access_log %s;\n", accessLog))
 	buf.WriteString(fmt.Sprintf("    error_log %s;\n", errorLog))
 
+	// WAF（roadmap #10）：CC 防护 + UA 黑名单
+	buf.WriteString(BuildWAFServerDirectives(site))
+
+	// 站点增强配置片段（伪静态/防盗链/重定向/访问控制，W-006~009）
+	buf.WriteString(buildSnippetInclude(site))
+
 	// 根据类型生成 location 块
 	switch site.Type {
 	case "static":

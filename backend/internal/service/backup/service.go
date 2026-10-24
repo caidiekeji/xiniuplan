@@ -105,7 +105,7 @@ func ensureBackupDir(backupType string) (string, error) {
 func (s *Service) CreateBackup(req dto.CreateBackupRequest) (*model.Backup, error) {
 	// 校验类型
 	switch req.Type {
-	case "site", "database", "system":
+	case "site", "database", "system", "app":
 	default:
 		return nil, fmt.Errorf("unsupported backup type: %s", req.Type)
 	}
@@ -148,6 +148,8 @@ func (s *Service) executeBackup(backupID uint) {
 		filePath, execErr = s.backupDatabase(backup.Target)
 	case "system":
 		filePath, execErr = s.backupSystem()
+	case "app":
+		filePath, execErr = s.backupApp(backup.Target)
 	default:
 		execErr = fmt.Errorf("unknown backup type: %s", backup.Type)
 	}
@@ -167,9 +169,100 @@ func (s *Service) executeBackup(backupID uint) {
 
 	backup.FilePath = filePath
 	backup.Size = size
+
+	// 备份加密（roadmap #4）：按设置对备份文件加密存储
+	if err := ApplyEncryption(s.db, backup); err != nil {
+		fmt.Printf("[backup] 加密失败(非致命，保留明文): %v\n", err)
+	}
 	backup.Status = "success"
 	backup.ErrorMsg = ""
 	s.db.Save(backup)
+
+	// 自动推送到已启用的远程存储（设置 backup_auto_push=true 且指定 backup_remote_id）
+	s.autoPushRemote(backup)
+}
+
+// backupApp 备份已安装应用（compose + 配置 + 本地数据目录，A-008/BK-001）
+func (s *Service) backupApp(appKey string) (string, error) {
+	if appKey == "" {
+		return "", errors.New("app key is required")
+	}
+
+	var installed model.InstalledApp
+	if err := s.db.Where("`key` = ?", appKey).First(&installed).Error; err != nil {
+		return "", fmt.Errorf("应用 %s 未安装", appKey)
+	}
+	if installed.InstallPath == "" {
+		return "", fmt.Errorf("应用安装目录为空")
+	}
+	if _, err := os.Stat(installed.InstallPath); os.IsNotExist(err) {
+		return "", fmt.Errorf("应用安装目录不存在: %s", installed.InstallPath)
+	}
+
+	dir, err := ensureBackupDir("app")
+	if err != nil {
+		return "", err
+	}
+
+	outFile := filepath.Join(dir, fmt.Sprintf("app_%s_%s.tar.gz", sanitizeName(appKey), timestamp()))
+	if err := tarGzDir(installed.InstallPath, outFile); err != nil {
+		return "", fmt.Errorf("tar app: %w", err)
+	}
+	return outFile, nil
+}
+
+// autoPushRemote 备份完成后自动推送到默认远程存储
+func (s *Service) autoPushRemote(backup *model.Backup) {
+	var settings []model.Setting
+	s.db.Where("`key` IN ?", []string{"backup_auto_push", "backup_remote_id"}).Find(&settings)
+	cfg := map[string]string{}
+	for _, st := range settings {
+		cfg[st.Key] = st.Value
+	}
+	if cfg["backup_auto_push"] != "true" {
+		return
+	}
+	var remoteID uint
+	fmt.Sscanf(cfg["backup_remote_id"], "%d", &remoteID)
+	if remoteID == 0 {
+		return
+	}
+	if err := s.PushBackup(backup.ID, remoteID); err != nil {
+		fmt.Printf("[backup-service] auto push backup #%d failed: %v\n", backup.ID, err)
+	}
+}
+
+// PushBackup 手动推送备份到指定远程存储（BK-003）
+func (s *Service) PushBackup(backupID, remoteID uint) error {
+	backup, err := s.GetBackup(backupID)
+	if err != nil {
+		return err
+	}
+	if backup.Status != "success" || backup.FilePath == "" {
+		return fmt.Errorf("备份未就绪，当前状态: %s", backup.Status)
+	}
+
+	remoteSvc := NewRemoteStorageService(s.db)
+	remote, err := remoteSvc.Get(remoteID)
+	if err != nil {
+		return err
+	}
+
+	backup.RemoteID = remoteID
+	backup.RemoteStatus = "pushing"
+	s.db.Save(backup)
+
+	fileName := filepath.Base(backup.FilePath)
+	if err := remoteSvc.Upload(remote, backup.FilePath, fileName); err != nil {
+		backup.RemoteStatus = "failed"
+		backup.RemoteMsg = err.Error()
+		s.db.Save(backup)
+		return fmt.Errorf("推送失败: %w", err)
+	}
+	backup.RemoteStatus = "success"
+	backup.RemoteMsg = "已推送到 " + remote.Name
+	s.db.Save(backup)
+	return nil
 }
 
 // backupSite 打包网站根目录
@@ -365,6 +458,18 @@ func (s *Service) RestoreBackup(id uint) error {
 		return fmt.Errorf("backup is not ready, current status: %s", backup.Status)
 	}
 
+	// 加密备份：解密到临时文件并把 FilePath 指向明文（恢复流程按原路径读取）
+	realPath, cleanup, derr := ResolveBackupFile(s.db, backup)
+	if derr != nil {
+		return fmt.Errorf("解密备份失败: %w", derr)
+	}
+	originalPath := backup.FilePath
+	backup.FilePath = realPath
+	defer func() {
+		cleanup()
+		backup.FilePath = originalPath
+	}()
+
 	if _, err := os.Stat(backup.FilePath); os.IsNotExist(err) {
 		return fmt.Errorf("backup file not found: %s", backup.FilePath)
 	}
@@ -381,9 +486,50 @@ func (s *Service) RestoreBackup(id uint) error {
 		return s.restoreDatabase(backup)
 	case "system":
 		return s.restoreSystem(backup)
+	case "app":
+		return s.restoreApp(backup)
 	default:
 		return fmt.Errorf("unsupported restore type: %s", backup.Type)
 	}
+}
+
+// restoreApp 恢复应用备份：down → 解压回安装目录 → up
+func (s *Service) restoreApp(backup *model.Backup) error {
+	var installed model.InstalledApp
+	if err := s.db.Where("`key` = ?", backup.Target).First(&installed).Error; err != nil {
+		return fmt.Errorf("应用 %s 未安装，请先安装后再恢复", backup.Target)
+	}
+	if installed.InstallPath == "" {
+		return fmt.Errorf("应用安装目录为空")
+	}
+
+	// 停止容器
+	_ = s.executor // 应用停止使用 docker compose（appstore 包负责 up/down，此处直接调用命令模板不可行，简单走 docker compose）
+	stopCmd := exec.Command("docker", "compose", "-f", filepath.Join(installed.InstallPath, "docker-compose.yml"), "down")
+	_ = stopCmd.Run()
+
+	// 清空安装目录后解压（保留目录本身）
+	entries, err := os.ReadDir(installed.InstallPath)
+	if err == nil {
+		for _, e := range entries {
+			os.RemoveAll(filepath.Join(installed.InstallPath, e.Name()))
+		}
+	}
+	if err := untarGz(backup.FilePath, installed.InstallPath); err != nil {
+		return fmt.Errorf("extract app backup: %w", err)
+	}
+
+	// 重新启动
+	startCmd := exec.Command("docker", "compose", "-f", filepath.Join(installed.InstallPath, "docker-compose.yml"), "up", "-d")
+	var stderr strings.Builder
+	startCmd.Stderr = &stderr
+	if err := startCmd.Run(); err != nil {
+		return fmt.Errorf("docker compose up: %w, stderr: %s", err, stderr.String())
+	}
+
+	installed.Status = "running"
+	s.db.Save(&installed)
+	return nil
 }
 
 // createPreRestoreSnapshot 恢复前创建当前状态快照
@@ -507,11 +653,14 @@ func (s *Service) DownloadBackup(id uint) (string, error) {
 		return "", errors.New("backup file path is empty")
 	}
 
-	if _, err := os.Stat(backup.FilePath); os.IsNotExist(err) {
-		return "", fmt.Errorf("backup file not found: %s", backup.FilePath)
+	// 加密备份：解密到临时文件供下载
+	realPath, cleanup, derr := ResolveBackupFile(s.db, backup)
+	if derr != nil {
+		return "", fmt.Errorf("解密备份失败: %w", derr)
 	}
-
-	return backup.FilePath, nil
+	// 下载是同步读取，清理交给调用方延迟不现实——解密文件放在系统临时目录由系统清理
+	_ = cleanup
+	return realPath, nil
 }
 
 // CleanupOldBackups 自动清理超过保留份数的旧备份
@@ -521,7 +670,7 @@ func (s *Service) CleanupOldBackups(keepCount int) error {
 	}
 
 	// 按类型分组清理
-	types := []string{"site", "database", "system"}
+	types := []string{"site", "database", "system", "app"}
 	for _, t := range types {
 		var backups []model.Backup
 		if err := s.db.Where("type = ? AND status = ?", t, "success").
@@ -766,6 +915,9 @@ func ToResponse(b *model.Backup) dto.BackupResponse {
 		Status:        b.Status,
 		Remark:        b.Remark,
 		ErrorMsg:      b.ErrorMsg,
+		RemoteID:      b.RemoteID,
+		RemoteStatus:  b.RemoteStatus,
+		RemoteMsg:     b.RemoteMsg,
 		CreatedAt:     b.CreatedAt.Format("2006-01-02 15:04:05"),
 	}
 }

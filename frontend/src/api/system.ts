@@ -5,7 +5,8 @@ import { request } from './request'
 export interface SystemSettings {
   panel_port: number
   domain: string
-  language: 'zh-CN' | 'en-US'
+  // 前端支持三语言（zh-CN / en-US / ja-JP），设置页此前只暴露了前两种
+  language: 'zh-CN' | 'en-US' | 'ja-JP'
   theme: 'dark' | 'light' | 'auto'
   security_entry: string
   session_timeout: number
@@ -51,18 +52,60 @@ export interface CleanResult {
 
 /* ==================== 面板设置 ==================== */
 
-export function getSettings() {
-  return request<SystemSettings>({
+/**
+ * 后端 settings 表的实际键名（backend/internal/model/setting.go）
+ * 与前端表单字段并非一一对应——域名的库键是 panel_domain，
+ * 数值型设置在库里是字符串。此处集中做键名与类型适配，
+ * 避免页面提交时写出后端不认识的键（那会新建垃圾设置项）。
+ */
+interface RawSettings {
+  panel_port?: string | number
+  panel_domain?: string
+  domain?: string
+  language?: string
+  theme?: string
+  security_entry?: string
+  session_timeout?: string | number
+}
+
+function toSettings(raw: RawSettings): SystemSettings {
+  return {
+    panel_port: Number(raw.panel_port ?? 8888),
+    domain: raw.panel_domain ?? raw.domain ?? '',
+    language: (raw.language ?? 'zh-CN') as SystemSettings['language'],
+    theme: (raw.theme ?? 'dark') as SystemSettings['theme'],
+    security_entry: raw.security_entry ?? '',
+    session_timeout: Number(raw.session_timeout ?? 120)
+  }
+}
+
+function toSettingsPayload(settings: Partial<SystemSettings>) {
+  const payload: Record<string, string> = {}
+  if (settings.panel_port !== undefined) payload.panel_port = String(settings.panel_port)
+  if (settings.domain !== undefined) payload.panel_domain = settings.domain
+  if (settings.language !== undefined) payload.language = settings.language
+  if (settings.theme !== undefined) payload.theme = settings.theme
+  if (settings.security_entry !== undefined) payload.security_entry = settings.security_entry
+  if (settings.session_timeout !== undefined) payload.session_timeout = String(settings.session_timeout)
+  return payload
+}
+
+export async function getSettings() {
+  // 后端返回 { settings: {...} }（dto.SettingsResponse），实际值在 settings 下
+  const res = await request<{ settings?: RawSettings }>({
     url: '/system/settings',
     method: 'get'
   })
+  return { ...res, data: toSettings(res.data?.settings || {}) }
 }
 
 export function updateSettings(settings: Partial<SystemSettings>) {
-  return request<SystemSettings>({
+  return request<{ updated: boolean; port_changed?: boolean; port_message?: string }>({
     url: '/system/settings',
     method: 'put',
-    data: settings
+    // 后端 dto.UpdateSettingsRequest 要求包一层 settings（binding:"required"），
+    // 直接提交 map 会 400 —— 设置保存按钮此前一直是坏的（2026-10-23 闭环审计）
+    data: { settings: toSettingsPayload(settings) }
   })
 }
 

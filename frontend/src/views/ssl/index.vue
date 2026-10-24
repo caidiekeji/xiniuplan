@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, h } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   NButton, NIcon, NForm, NFormItem, NInput, NSelect, NRadioGroup, NRadio,
-  NSpace, useMessage
+  NSpace
 } from 'naive-ui'
+import { useMessage } from '@/composables/useMessage'
 import {
   AddOutline, EyeOutline, RefreshOutline, TrashOutline
 } from '@vicons/ionicons5'
 import {
-  PageCard, DataTable, ModalForm, StatusTag, ConfirmDialog, CodeEditor
+  PageCard, DataTable, ModalForm, ContentModal, StatusTag, ConfirmDialog, CodeEditor
 } from '@/components'
 import type { StatusType } from '@/components'
 import {
@@ -20,6 +22,7 @@ import { getDNSAccounts, type DNSAccount } from '@/api/dns'
 import type { DataTableColumns } from 'naive-ui'
 
 const message = useMessage()
+const { t } = useI18n()
 
 /* ========== 列表状态 ========== */
 const loading = ref(false)
@@ -27,44 +30,17 @@ const sslList = ref<SSLInfo[]>([])
 const sites = ref<Site[]>([])
 const dnsAccounts = ref<DNSAccount[]>([])
 
-const providerLabelMap: Record<SSLProvider, string> = {
+const providerLabelMap = computed<Record<SSLProvider, string>>(() => ({
   letsencrypt: "Let's Encrypt",
-  manual: '手动上传'
-}
+  manual: t('ssl.provider.manual')
+}))
 
-const sslStatusMap: Record<SSLStatus, { status: StatusType; text: string }> = {
-  valid: { status: 'running', text: '有效' },
-  expiring: { status: 'warning', text: '即将到期' },
-  expired: { status: 'error', text: '已过期' },
-  pending: { status: 'pending', text: '签发中' }
-}
-
-function generateMockSSLList(): SSLInfo[] {
-  const now = Date.now()
-  return [
-    {
-      id: 1, siteId: 1, domain: 'example.com',
-      provider: 'letsencrypt', email: 'admin@example.com',
-      issuer: "Let's Encrypt Authority X3",
-      expireAt: new Date(now + 60 * 86400000).toISOString().slice(0, 10),
-      status: 'valid'
-    },
-    {
-      id: 2, siteId: 2, domain: 'api.example.com',
-      provider: 'manual',
-      issuer: 'DigiCert Inc',
-      expireAt: new Date(now + 15 * 86400000).toISOString().slice(0, 10),
-      status: 'expiring'
-    },
-    {
-      id: 3, siteId: 4, domain: 'shop.example.com',
-      provider: 'letsencrypt', email: 'admin@example.com',
-      issuer: "Let's Encrypt Authority X3",
-      expireAt: new Date(now - 5 * 86400000).toISOString().slice(0, 10),
-      status: 'expired'
-    }
-  ]
-}
+const sslStatusMap = computed<Record<SSLStatus, { status: StatusType; text: string }>>(() => ({
+  valid: { status: 'running', text: t('ssl.status.valid') },
+  expiring: { status: 'warning', text: t('ssl.status.expiring') },
+  expired: { status: 'error', text: t('ssl.status.expired') },
+  pending: { status: 'pending', text: t('ssl.status.pending') }
+}))
 
 async function loadSSLList() {
   loading.value = true
@@ -73,10 +49,11 @@ async function loadSSLList() {
     if (res.data && Array.isArray(res.data)) {
       sslList.value = res.data
     } else {
-      sslList.value = generateMockSSLList()
+      sslList.value = []
     }
   } catch {
-    sslList.value = generateMockSSLList()
+    sslList.value = []
+    message.error(t('ssl.messages.loadListFailed'))
   } finally {
     loading.value = false
   }
@@ -117,19 +94,19 @@ function getDaysRemaining(expireAt: string): number {
 /* ========== 表格列 ========== */
 const columns = computed<DataTableColumns>(() => [
   {
-    title: '域名',
+    title: t('ssl.columns.domain'),
     key: 'domain',
     width: 220,
     render: (row: any) => h('span', { class: 'mono', style: 'font-weight:500' }, row.domain)
   },
   {
-    title: '证书提供方',
+    title: t('ssl.columns.provider'),
     key: 'provider',
     width: 160,
-    render: (row: any) => h('span', { style: 'color:var(--sub)' }, providerLabelMap[row.provider as keyof typeof providerLabelMap])
+    render: (row: any) => h('span', { style: 'color:var(--sub)' }, providerLabelMap.value[row.provider as keyof typeof providerLabelMap.value])
   },
   {
-    title: '到期时间',
+    title: t('ssl.columns.expireAt'),
     key: 'expireAt',
     width: 200,
     render: (row: any) => {
@@ -140,22 +117,22 @@ const columns = computed<DataTableColumns>(() => [
       return h('div', null, [
         h('div', { class: 'mono', style: `color:${color};font-weight:500` }, row.expireAt),
         h('div', { style: `font-size:var(--fs-caption);color:${color}` },
-          isExpired ? `已过期 ${Math.abs(days)} 天` : `剩余 ${days} 天`
+          isExpired ? t('ssl.expireText.expired', { days: Math.abs(days) }) : t('ssl.expireText.remaining', { days })
         )
       ])
     }
   },
   {
-    title: '状态',
+    title: t('ssl.columns.status'),
     key: 'status',
     width: 120,
     render: (row: any) => {
-      const cfg = sslStatusMap[row.status as keyof typeof sslStatusMap]
+      const cfg = sslStatusMap.value[row.status as keyof typeof sslStatusMap.value]
       return h(StatusTag, { status: cfg.status, text: cfg.text })
     }
   },
   {
-    title: '操作',
+    title: t('ssl.columns.actions'),
     key: 'actions',
     width: 240,
     render: (row: any) => h(NSpace, { size: 'small', wrap: false }, {
@@ -166,7 +143,7 @@ const columns = computed<DataTableColumns>(() => [
           onClick: () => viewDetail(row)
         }, {
           icon: () => h(NIcon, null, { default: () => h(EyeOutline) }),
-          default: () => '详情'
+          default: () => t('ssl.actions.detail')
         }),
         h(NButton, {
           size: 'tiny',
@@ -176,7 +153,7 @@ const columns = computed<DataTableColumns>(() => [
           onClick: () => handleRenew(row.id)
         }, {
           icon: () => h(NIcon, null, { default: () => h(RefreshOutline) }),
-          default: () => '续期'
+          default: () => t('ssl.actions.renew')
         }),
         h(NButton, {
           size: 'tiny',
@@ -185,7 +162,7 @@ const columns = computed<DataTableColumns>(() => [
           onClick: () => openDelete(row)
         }, {
           icon: () => h(NIcon, null, { default: () => h(TrashOutline) }),
-          default: () => '删除'
+          default: () => t('ssl.actions.delete')
         })
       ]
     })
@@ -196,13 +173,24 @@ const columns = computed<DataTableColumns>(() => [
 const renewLoadingId = ref<number | null>(null)
 
 async function handleRenew(id: number) {
+  // 后端要求 email 必填，缺失时先提示，不再发必然失败的请求
+  if (!applyForm.email) {
+    message.warning(t('ssl.messages.emailRequired'))
+    return
+  }
   renewLoadingId.value = id
   try {
-    await renewSSL(id)
-    message.success('证书续期成功')
+    const res = await renewSSL(id, applyForm.email)
+    // Let's Encrypt 目前是 MVP 模拟：后端只写申请日志、不执行 certbot，
+    // 返回 status=pending_implementation —— 如实提示，不能报「续期成功」
+    if (res.data?.status === 'pending_implementation') {
+      message.warning(t('ssl.messages.renewPending'))
+    } else {
+      message.success(t('ssl.messages.renewSuccess'))
+    }
     loadSSLList()
   } catch (err: any) {
-    message.error(err.message || '续期失败')
+    message.error(err.message || t('ssl.messages.renewFailed'))
   } finally {
     renewLoadingId.value = null
   }
@@ -232,40 +220,40 @@ const applyForm = reactive({
   dns_account_id: null as number | null
 })
 
-const applyRules = {
+const applyRules = computed(() => ({
   siteId: {
     required: true,
-    message: '请选择站点',
+    message: t('ssl.rules.selectSite'),
     trigger: 'change'
   },
   email: {
     required: true,
-    message: '请输入邮箱地址',
+    message: t('ssl.rules.email'),
     trigger: 'blur'
   },
   cert: {
     required: true,
-    message: '请输入证书内容',
+    message: t('ssl.rules.cert'),
     trigger: 'blur'
   },
   key: {
     required: true,
-    message: '请输入私钥内容',
+    message: t('ssl.rules.key'),
     trigger: 'blur'
   },
   dns_account_id: {
     required: true,
-    message: '请选择 DNS 提供商',
+    message: t('ssl.rules.dnsProvider'),
     trigger: 'change'
   }
-}
+}))
 
 const siteOptions = computed(() =>
   sites.value.map((s) => ({ label: s.domain, value: s.id }))
 )
 
 const dnsAccountOptions = computed(() =>
-  dnsAccounts.value.map((a) => ({ label: `${a.name}（${a.provider_type}）`, value: a.id }))
+  dnsAccounts.value.map((a) => ({ label: t('ssl.apply.dnsAccountLabel', { name: a.name, type: a.provider_type }), value: a.id }))
 )
 
 function openApply() {
@@ -304,15 +292,15 @@ async function handleApplySubmit() {
 
   applyLoading.value = true
   if (applyForm.verification_method === 'dns' && applyForm.provider === 'letsencrypt') {
-    applyStatusText.value = '正在添加 DNS TXT 记录...'
+    applyStatusText.value = t('ssl.applyStatus.dnsAdding')
   }
   try {
     await applySSL(applyForm.siteId, data)
-    message.success('证书申请提交成功')
+    message.success(t('ssl.messages.applySuccess'))
     showApply.value = false
     loadSSLList()
   } catch (err: any) {
-    message.error(err.message || '申请失败')
+    message.error(err.message || t('ssl.messages.applyFailed'))
   } finally {
     applyLoading.value = false
     applyStatusText.value = ''
@@ -336,11 +324,11 @@ async function handleDeleteConfirm() {
   deleteLoading.value = true
   try {
     await deleteSSL(deleteSSLId.value)
-    message.success('证书已删除')
+    message.success(t('ssl.messages.deleteSuccess'))
     showDelete.value = false
     loadSSLList()
   } catch (err: any) {
-    message.error(err.message || '删除失败')
+    message.error(err.message || t('ssl.messages.deleteFailed'))
   } finally {
     deleteLoading.value = false
   }
@@ -354,13 +342,13 @@ onMounted(() => {
 </script>
 
 <template>
-  <PageCard title="SSL 证书" subtitle="HTTPS 证书申请、续期与管理">
+  <PageCard :title="t('ssl.title')" :subtitle="t('ssl.subtitle')">
     <template #extra>
       <NButton type="primary" @click="openApply">
         <template #icon>
           <NIcon><AddOutline /></NIcon>
         </template>
-        申请证书
+        {{ t('ssl.actions.apply') }}
       </NButton>
     </template>
 
@@ -373,114 +361,113 @@ onMounted(() => {
   </PageCard>
 
   <!-- 证书详情对话框 -->
-  <NModal
+  <ContentModal
     :show="showDetail"
     :mask-closable="false"
-    preset="card"
-    title="证书详情"
-    :style="{ width: 'var(--modal-width-md)' }"
+    :title="t('ssl.detail.title')"
+    size="md"
     @update:show="(v: boolean) => (showDetail = v)"
   >
     <div v-if="detailData" class="ssl-detail">
       <div class="ssl-detail__row">
-        <span class="ssl-detail__label">域名</span>
+        <span class="ssl-detail__label">{{ t('ssl.columns.domain') }}</span>
         <span class="ssl-detail__value mono">{{ detailData.domain }}</span>
       </div>
       <div class="ssl-detail__row">
-        <span class="ssl-detail__label">提供方</span>
+        <span class="ssl-detail__label">{{ t('ssl.detail.providerLabel') }}</span>
         <span class="ssl-detail__value">{{ providerLabelMap[detailData.provider] }}</span>
       </div>
       <div class="ssl-detail__row" v-if="detailData.issuer">
-        <span class="ssl-detail__label">签发机构</span>
+        <span class="ssl-detail__label">{{ t('ssl.detail.issuer') }}</span>
         <span class="ssl-detail__value">{{ detailData.issuer }}</span>
       </div>
       <div class="ssl-detail__row" v-if="detailData.email">
-        <span class="ssl-detail__label">联系邮箱</span>
+        <span class="ssl-detail__label">{{ t('ssl.detail.email') }}</span>
         <span class="ssl-detail__value mono">{{ detailData.email }}</span>
       </div>
       <div class="ssl-detail__row">
-        <span class="ssl-detail__label">到期时间</span>
+        <span class="ssl-detail__label">{{ t('ssl.columns.expireAt') }}</span>
         <span class="ssl-detail__value mono">{{ detailData.expireAt }}</span>
       </div>
       <div class="ssl-detail__row">
-        <span class="ssl-detail__label">状态</span>
+        <span class="ssl-detail__label">{{ t('ssl.columns.status') }}</span>
         <StatusTag
           :status="sslStatusMap[detailData.status].status"
           :text="sslStatusMap[detailData.status].text"
         />
       </div>
     </div>
-  </NModal>
+  </ContentModal>
 
   <!-- 申请证书对话框 -->
   <ModalForm
     :show="showApply"
-    title="申请 SSL 证书"
+    :title="t('ssl.apply.title')"
     :loading="applyLoading"
     :width="640"
     @update:show="(v: boolean) => (showApply = v)"
     @submit="handleApplySubmit"
   >
     <NForm ref="applyFormRef" :model="applyForm" :rules="applyRules" label-placement="top">
-      <NFormItem label="选择站点" path="siteId">
+      <NFormItem :label="t('ssl.apply.selectSite')" path="siteId">
         <NSelect
           v-model:value="applyForm.siteId"
           :options="siteOptions"
-          placeholder="选择要绑定证书的站点"
+          :placeholder="t('ssl.apply.sitePlaceholder')"
         />
       </NFormItem>
 
-      <NFormItem label="申请方式" path="provider">
+      <NFormItem :label="t('ssl.apply.methodLabel')" path="provider">
         <NRadioGroup v-model:value="applyForm.provider">
           <NSpace>
-            <NRadio value="letsencrypt">Let's Encrypt（自动签发）</NRadio>
-            <NRadio value="manual">手动上传</NRadio>
+            <NRadio value="letsencrypt">{{ t('ssl.apply.letsencryptOption') }}</NRadio>
+            <NRadio value="manual">{{ t('ssl.provider.manual') }}</NRadio>
           </NSpace>
         </NRadioGroup>
       </NFormItem>
 
       <template v-if="applyForm.provider === 'letsencrypt'">
-        <NFormItem label="邮箱地址" path="email">
+        <NFormItem :label="t('ssl.apply.emailLabel')" path="email">
           <NInput
             v-model:value="applyForm.email"
             type="text"
-            placeholder="用于接收证书到期提醒"
+            :placeholder="t('ssl.apply.emailPlaceholder')"
           />
         </NFormItem>
-        <NFormItem label="验证方式">
+        <NFormItem :label="t('ssl.apply.verificationLabel')">
           <NRadioGroup v-model:value="applyForm.verification_method">
             <NSpace>
-              <NRadio value="http">HTTP 验证</NRadio>
-              <NRadio value="dns">DNS 验证</NRadio>
+              <NRadio value="http">{{ t('ssl.apply.httpOption') }}</NRadio>
+              <NRadio value="dns">{{ t('ssl.apply.dnsOption') }}</NRadio>
             </NSpace>
           </NRadioGroup>
         </NFormItem>
 
         <template v-if="applyForm.verification_method === 'http'">
-          <NFormItem label="验证说明">
-            <NInput value="将自动在站点目录放置验证文件完成 HTTP-01 验证" disabled />
+          <NFormItem :label="t('ssl.apply.verificationNoteLabel')">
+            <NInput :value="t('ssl.apply.httpNote')" disabled />
           </NFormItem>
         </template>
 
         <template v-else>
-          <NFormItem label="DNS 提供商" path="dns_account_id">
+          <NFormItem :label="t('ssl.apply.dnsProviderLabel')" path="dns_account_id">
             <NSelect
               v-model:value="applyForm.dns_account_id"
               :options="dnsAccountOptions"
-              placeholder="选择已配置的 DNS 提供商账号"
+              :placeholder="t('ssl.apply.dnsProviderPlaceholder')"
             />
           </NFormItem>
-          <NFormItem label="验证说明">
+          <NFormItem :label="t('ssl.apply.verificationNoteLabel')">
             <div class="ssl-apply__dns-hint">
               <span class="led led--warn" />
-              <span>将自动添加 TXT 记录完成 DNS-01 验证，无需手动操作</span>
+              <span>{{ t('ssl.apply.dnsNote') }}</span>
             </div>
           </NFormItem>
         </template>
       </template>
 
       <template v-else>
-        <NFormItem label="证书内容 (PEM)" path="cert">
+        <NFormItem :label="t('ssl.apply.certLabel')" path="cert">
           <CodeEditor
             v-model="applyForm.cert"
             language="plaintext"
@@ -489,7 +476,7 @@ onMounted(() => {
             placeholder="-----BEGIN CERTIFICATE-----"
           />
         </NFormItem>
-        <NFormItem label="私钥内容 (PEM)" path="key">
+        <NFormItem :label="t('ssl.apply.keyLabel')" path="key">
           <CodeEditor
             v-model="applyForm.key"
             language="plaintext"
@@ -509,9 +496,9 @@ onMounted(() => {
   <!-- 删除确认 -->
   <ConfirmDialog
     :show="showDelete"
-    title="删除证书"
-    :content="`确定要删除域名「${deleteSSLDomain}」的 SSL 证书吗？删除后该站点将无法使用 HTTPS。`"
-    confirm-text="删除"
+    :title="t('ssl.confirm.deleteTitle')"
+    :content="t('ssl.confirm.deleteContent', { domain: deleteSSLDomain })"
+    :confirm-text="t('ssl.confirm.deleteConfirmText')"
     type="error"
     :loading="deleteLoading"
     @update:show="(v: boolean) => (showDelete = v)"
@@ -539,7 +526,7 @@ onMounted(() => {
 }
 
 .ssl-detail__label {
-  color: var(--faint);
+  color: var(--text-quaternary);
   font-size: var(--fs-body);
 }
 

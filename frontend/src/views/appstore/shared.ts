@@ -1,6 +1,6 @@
 import { h } from 'vue'
 import { NButton, NIcon, NSpace, NTag } from 'naive-ui'
-import { StatusTag } from '@/components'
+ '@/components'
 import type { StatusType } from '@/components'
 import type { AppCategory, AppStatus, AppSourceType } from '@/api/appstore'
 
@@ -41,37 +41,19 @@ export function btnGroup(children: any[]) {
 
 /* ==================== 工具函数 ==================== */
 
-export function formatTime(s: string): string {
-  if (!s) return '-'
-  return s.replace('T', ' ').substring(0, 19)
-}
+export { formatISOTime as formatTime } from '@/utils/format'
 
-/** 根据 app key 生成确定性颜色 */
-const iconColors = [
-  '#1BA784', '#2DD4A8', '#60A5FA', '#E85D4D', '#A78BFA',
-  '#F472B6', '#34D399', '#4AC7A5', '#38BDF8', '#FB7185'
-]
-
+/** 根据 app key 生成确定性色板序号（1-10），色值统一由 --chart-palette-* token 提供 */
 export function getIconColor(key: string): string {
   let hash = 0
   for (let i = 0; i < key.length; i++) {
     hash = key.charCodeAt(i) + ((hash << 5) - hash)
   }
-  return iconColors[Math.abs(hash) % iconColors.length]
+  return `var(--chart-palette-${(Math.abs(hash) % 10) + 1})`
 }
 
-export function categoryLabel(cat: AppCategory): string {
-  const map: Record<AppCategory, string> = {
-    website: '建站',
-    devtools: '开发工具',
-    database: '数据库',
-    middleware: '中间件',
-    monitor: '监控',
-    office: '办公',
-    storage: '存储',
-    network: '网络'
-  }
-  return map[cat] || cat
+export function categoryLabel(t: (k: string, prms?: any) => string, cat: AppCategory): string {
+  return t('appstore.categories.' + cat) || cat
 }
 
 export function categoryTagType(cat: AppCategory): string {
@@ -101,25 +83,14 @@ export function mapAppStatus(status: AppStatus): StatusType {
   }
 }
 
-export function appStatusText(status: AppStatus): string {
-  const map: Record<AppStatus, string> = {
-    installed: '已安装',
-    installing: '安装中',
-    failed: '安装失败',
-    not_installed: '未安装'
-  }
-  return map[status] || status
+export function appStatusText(t: (k: string, prms?: any) => string, status: AppStatus): string {
+  return t('appstore.statuses.' + status) || status
 }
 
 /* ==================== 源相关工具函数 ==================== */
 
-export function sourceTypeLabel(type: AppSourceType): string {
-  const map: Record<AppSourceType, string> = {
-    official: '官方',
-    community: '社区',
-    private: '私有'
-  }
-  return map[type] || type
+export function sourceTypeLabel(t: (k: string, prms?: any) => string, type: AppSourceType): string {
+  return t('appstore.sourceTypes.' + type) || type
 }
 
 export function sourceTypeTagType(type: AppSourceType): string {

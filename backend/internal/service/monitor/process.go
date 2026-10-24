@@ -2,7 +2,9 @@ package monitor
 
 import (
 	"fmt"
+	"os"
 	"sort"
+	"time"
 
 	"cloudpivot/internal/dto"
 
@@ -72,6 +74,42 @@ func (s *Service) ListProcesses(topN int, sortBy string) ([]dto.ProcessInfo, err
 	return infos, nil
 }
 
+// KillProcess 终止进程（M-002），支持 SIGTERM（signal=15）与 SIGKILL（signal=9）
+// 保护性拦截：PID 1（init）、面板自身进程不允许终止
+func (s *Service) KillProcess(pid int32, signal int32) error {
+	if pid <= 1 {
+		return fmt.Errorf("不允许终止 init 进程 (PID %d)", pid)
+	}
+	if int(pid) == os.Getpid() {
+		return fmt.Errorf("不允许终止面板自身进程 (PID %d)", pid)
+	}
+	if signal != 9 && signal != 15 {
+		signal = 15 // 默认 SIGTERM
+	}
+
+	proc, err := process.NewProcess(pid)
+	if err != nil {
+		return fmt.Errorf("进程 %d 不存在", pid)
+	}
+	name, _ := proc.Name()
+	if signal == 9 {
+		if err := proc.Kill(); err != nil {
+			return fmt.Errorf("强制结束进程 %d (%s) 失败: %w", pid, name, err)
+		}
+		return nil
+	}
+	if err := proc.Terminate(); err != nil {
+		return fmt.Errorf("终止进程 %d (%s) 失败: %w", pid, name, err)
+	}
+
+	// SIGTERM 后短暂等待，若仍存活提示可用 SIGKILL
+	time.Sleep(1500 * time.Millisecond)
+	if running, _ := proc.IsRunning(); running {
+		return fmt.Errorf("已发送 SIGTERM，进程 %d (%s) 仍未退出，可尝试强制结束 (signal=9)", pid, name)
+	}
+	return nil
+}
+
 // GetDiskAnalysis 各挂载点使用量
 func (s *Service) GetDiskAnalysis() ([]dto.DiskUsage, error) {
 	parts, err := disk.Partitions(false)
@@ -97,20 +135,26 @@ func (s *Service) GetDiskAnalysis() ([]dto.DiskUsage, error) {
 	return usages, nil
 }
 
-// GetNetworkConnections 网络连接统计
+// GetNetworkConnections 网络连接统计：TCP 状态分布（含 TIME_WAIT/CLOSE_WAIT/OTHER）
 func (s *Service) GetNetworkConnections() (*dto.NetworkStats, error) {
 	conns, err := net.Connections("all")
 	if err != nil {
 		return nil, fmt.Errorf("get network connections: %w", err)
 	}
 
-	stats := &dto.NetworkStats{Total: len(conns)}
+	stats := &dto.NetworkStats{TotalConnections: len(conns)}
 	for _, conn := range conns {
 		switch conn.Status {
 		case "ESTABLISHED":
 			stats.Established++
 		case "LISTEN":
 			stats.Listening++
+		case "TIME_WAIT":
+			stats.TimeWait++
+		case "CLOSE_WAIT":
+			stats.CloseWait++
+		default:
+			stats.Other++
 		}
 	}
 

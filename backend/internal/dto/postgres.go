@@ -22,6 +22,8 @@ type CreatePostgresUserRequest struct {
 
 // PostgresGrantRequest PostgreSQL 授权请求
 type PostgresGrantRequest struct {
+	// DBName 目标库名。优先取 body，query 参数 db_name 仍兼容
+	DBName     string   `json:"db_name"`
 	Privileges []string `json:"privileges" binding:"required"` // ALL | SELECT | INSERT | UPDATE | DELETE | CONNECT | TEMPORARY
 }
 

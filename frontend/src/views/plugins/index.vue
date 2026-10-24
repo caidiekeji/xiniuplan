@@ -1,21 +1,17 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { useMessage } from 'naive-ui'
-import {
-  NButton, NIcon, NEmpty, NSpin, NGrid, NGi,
-  NCard, NFormItem, NSwitch
-} from 'naive-ui'
-import {
-  SettingsOutline, PlayOutline, StopOutline,
-  ExtensionPuzzleOutline
-} from '@vicons/ionicons5'
+import { useMessage } from '@/composables/useMessage'
+import { NButton, NIcon, NEmpty, NSpin, NCard, NFormItem, NSwitch } from 'naive-ui'
+import { SettingsOutline, ExtensionPuzzleOutline } from '@vicons/ionicons5'
 import {
   PageCard, StatusTag, ModalForm, CodeEditor
 } from '@/components'
 import type { StatusType } from '@/components'
 import * as pluginApi from '@/api/plugin'
 import type { PluginItem } from '@/api/plugin'
+import { useI18n } from 'vue-i18n'
 
+const { t } = useI18n()
 const message = useMessage()
 
 /* ==================== 状态 ==================== */
@@ -32,18 +28,13 @@ const configText = ref('{}')
 
 /* ==================== 工具函数 ==================== */
 
-/** 根据插件名生成确定性颜色 */
-const iconColors = [
-  '#1BA784', '#2DD4A8', '#60A5FA', '#E85D4D', '#A78BFA',
-  '#F472B6', '#34D399', '#4AC7A5', '#38BDF8', '#FB7185'
-]
-
+/** 根据插件名生成确定性色板序号（1-10），色值统一由 --chart-palette-* token 提供 */
 function getIconColor(name: string): string {
   let hash = 0
   for (let i = 0; i < name.length; i++) {
     hash = name.charCodeAt(i) + ((hash << 5) - hash)
   }
-  return iconColors[Math.abs(hash) % iconColors.length]
+  return `var(--chart-palette-${(Math.abs(hash) % 10) + 1})`
 }
 
 function mapStatus(p: PluginItem): StatusType {
@@ -51,8 +42,8 @@ function mapStatus(p: PluginItem): StatusType {
 }
 
 function statusText(p: PluginItem): string {
-  if (p.running) return '运行中'
-  return p.enabled ? '已启用' : '已禁用'
+  if (p.running) return t('plugins.status.running')
+  return p.enabled ? t('plugins.status.enabled') : t('plugins.status.disabled')
 }
 
 /* ==================== 数据加载 ==================== */
@@ -63,7 +54,7 @@ async function loadPlugins() {
     const res = await pluginApi.getPlugins()
     plugins.value = res.data.items
   } catch (e: any) {
-    message.error(e.message || '加载插件列表失败')
+    message.error(e.message || t('plugins.messages.loadFailed'))
     plugins.value = []
   } finally {
     loading.value = false
@@ -80,14 +71,14 @@ async function togglePlugin(p: PluginItem) {
   try {
     if (p.enabled) {
       await pluginApi.disablePlugin(p.name)
-      message.success(`插件「${p.name}」已禁用`)
+      message.success(t('plugins.messages.disabled', { name: p.name }))
     } else {
       await pluginApi.enablePlugin(p.name)
-      message.success(`插件「${p.name}」已启用`)
+      message.success(t('plugins.messages.enabled', { name: p.name }))
     }
     await loadPlugins()
   } catch (e: any) {
-    message.error(e.message || '操作失败')
+    message.error(e.message || t('plugins.messages.actionFailed'))
   } finally {
     toggling.value.delete(p.name)
   }
@@ -103,7 +94,7 @@ async function openConfig(p: PluginItem) {
     const res = await pluginApi.getPluginConfig(p.name)
     configText.value = res.data.raw || '{}'
   } catch (e: any) {
-    message.error(e.message || '加载配置失败')
+    message.error(e.message || t('plugins.messages.loadConfigFailed'))
   }
 }
 
@@ -116,14 +107,14 @@ async function submitConfig() {
     try {
       configObj = JSON.parse(configText.value)
     } catch {
-      message.error('JSON 格式错误，请检查配置内容')
+      message.error(t('plugins.messages.jsonInvalid'))
       return
     }
     await pluginApi.updatePluginConfig(currentPlugin.value.name, configObj)
-    message.success('配置已保存')
+    message.success(t('plugins.messages.configSaved'))
     configModalVisible.value = false
   } catch (e: any) {
-    message.error(e.message || '保存配置失败')
+    message.error(e.message || t('plugins.messages.saveConfigFailed'))
   } finally {
     configLoading.value = false
   }
@@ -142,15 +133,15 @@ onMounted(() => {
 
 <template>
   <PageCard
-    title="插件管理"
-    :subtitle="`已安装 ${plugins.length} 个插件 · 已启用 ${enabledCount} 个`"
+    :title="t('plugins.title')"
+    :subtitle="t('plugins.subtitle', { total: plugins.length, enabled: enabledCount })"
   >
     <template #extra>
       <NButton @click="loadPlugins" :loading="loading" size="small">
         <template #icon>
           <NIcon><ExtensionPuzzleOutline /></NIcon>
         </template>
-        刷新
+        {{ t('plugins.refresh') }}
       </NButton>
     </template>
 
@@ -191,9 +182,9 @@ onMounted(() => {
           <div class="plugin-card__footer">
             <div class="plugin-card__toggle">
               <span class="plugin-card__toggle-label">
-                {{ p.enabled ? '已启用' : '已禁用' }}
+                {{ p.enabled ? t('plugins.status.enabled') : t('plugins.status.disabled') }}
               </span>
-              <div :title="p.enabled ? '点击禁用' : '点击启用'">
+              <div :title="p.enabled ? t('plugins.toggle.disable') : t('plugins.toggle.enable')">
                 <NSwitch
                   :value="p.enabled"
                   :loading="toggling.has(p.name)"
@@ -209,7 +200,7 @@ onMounted(() => {
               <template #icon>
                 <NIcon><SettingsOutline /></NIcon>
               </template>
-              配置
+              {{ t('plugins.actions.config') }}
             </NButton>
           </div>
         </NCard>
@@ -217,7 +208,7 @@ onMounted(() => {
 
       <!-- 空态 -->
       <div v-else-if="!loading" class="empty-hint">
-        <NEmpty description="暂无已安装插件">
+        <NEmpty :description="t('plugins.empty')">
           <template #icon>
             <NIcon :size="48"><ExtensionPuzzleOutline /></NIcon>
           </template>
@@ -228,12 +219,12 @@ onMounted(() => {
     <!-- 配置对话框 -->
     <ModalForm
       v-model:show="configModalVisible"
-      :title="currentPlugin ? `配置插件 - ${currentPlugin.name}` : '插件配置'"
+      :title="currentPlugin ? t('plugins.configModal.titleWithPlugin', { name: currentPlugin.name }) : t('plugins.configModal.title')"
       :loading="configLoading"
       :width="640"
       @submit="submitConfig"
     >
-      <NFormItem label="插件配置 (JSON)">
+      <NFormItem :label="t('plugins.configModal.fieldLabel')">
         <CodeEditor
           v-model="configText"
           language="json"
@@ -242,7 +233,7 @@ onMounted(() => {
         />
       </NFormItem>
       <div class="config-hint">
-        配置以 JSON 格式存储，保存后若插件正在运行将热更新配置。
+        {{ t('plugins.configModal.hint') }}
       </div>
     </ModalForm>
   </PageCard>
@@ -325,8 +316,8 @@ onMounted(() => {
 
 .plugin-card__version {
   font-size: var(--fs-caption);
-  color: var(--faint);
-  margin-top: 2px;
+  color: var(--text-quaternary);
+  margin-top: var(--space-0);
 }
 
 .plugin-card__desc {
@@ -346,7 +337,7 @@ onMounted(() => {
   align-items: center;
   gap: var(--space-1);
   font-size: var(--fs-caption);
-  color: var(--faint);
+  color: var(--text-quaternary);
   margin-bottom: var(--space-3);
 }
 
@@ -404,7 +395,7 @@ onMounted(() => {
 
 .config-hint {
   font-size: var(--fs-caption);
-  color: var(--faint);
+  color: var(--text-quaternary);
   margin-top: var(--space-2);
 }
 

@@ -1,23 +1,25 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { NTabs, NTabPane } from 'naive-ui'
 import UserListTab from './UserListTab.vue'
 import RoleListTab from './RoleListTab.vue'
 import TOTPTab from './TOTPTab.vue'
 
+const { t } = useI18n()
 const activeTab = ref('users')
 </script>
 
 <template>
   <div class="users-page">
     <NTabs v-model:value="activeTab" type="line" animated class="users-tabs">
-      <NTabPane name="users" tab="用户列表">
+      <NTabPane name="users" :tab="t('usersIndex.tabs.users')">
         <UserListTab />
       </NTabPane>
-      <NTabPane name="roles" tab="角色权限">
+      <NTabPane name="roles" :tab="t('usersIndex.tabs.roles')">
         <RoleListTab />
       </NTabPane>
-      <NTabPane name="totp" tab="TOTP 二次验证">
+      <NTabPane name="totp" :tab="t('usersIndex.tabs.totp')">
         <TOTPTab />
       </NTabPane>
     </NTabs>

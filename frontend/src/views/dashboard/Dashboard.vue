@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, computed, nextTick, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { NGrid, NGi, NCard, NSpace, NTag, NButton, NIcon } from 'naive-ui'
+import { NGrid, NGi, NSpace, NButton } from 'naive-ui'
 // echarts 按需引入：只注册实际用到的图表和组件，减小包体积
 import * as echarts from 'echarts/core'
 import { LineChart } from 'echarts/charts'
@@ -11,10 +11,10 @@ import { CanvasRenderer } from 'echarts/renderers'
 echarts.use([LineChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer])
 import { StatCard, PageCard, StatusTag } from '@/components'
 import { getOverview, getMetrics, getAuditLogs, normalizeOverview, type OverviewData, type AuditLogItem } from '@/api/dashboard'
-import { useThemeTokens } from '@/composables/useThemeTokens'
+import { useThemeTokens, fsPx } from '@/composables/useThemeTokens'
 
 const { t, locale } = useI18n()
-const { tokens, refresh: refreshTokens } = useThemeTokens()
+const { tokens } = useThemeTokens()
 
 /** hex 颜色转 rgba，用于 ECharts 渐变 */
 function hexToRgba(hex: string, alpha: number): string {
@@ -31,6 +31,22 @@ const auditLogs = ref<AuditLogItem[]>([])
 const chartRef = ref<HTMLDivElement | null>(null)
 let chartInstance: echarts.ECharts | null = null
 
+// 图表文字摘要：读屏用户看不到 Canvas，用 aria-label 承载最新值（审计 D10①）
+const chartAriaLabel = ref('')
+function updateChartAria(points: { cpu: number; memory: number }[]) {
+  if (points.length === 0) {
+    chartAriaLabel.value = t('dashboard.chartAriaEmpty')
+    return
+  }
+  const last = points[points.length - 1]
+  const rangeLabel = rangeOptions.value.find((o) => o.value === metricRange.value)?.label || metricRange.value
+  chartAriaLabel.value = t('dashboard.chartAria', {
+    cpu: last.cpu.toFixed(1),
+    mem: last.memory.toFixed(1),
+    range: rangeLabel
+  })
+}
+
 const metricRange = ref('24h')
 const rangeOptions = computed(() => [
   { label: t('dashboard.range1h'), value: '1h' },
@@ -43,11 +59,6 @@ const cpuPercent = computed(() => (overview.value?.cpu.usage ?? 0).toFixed(1))
 const memPercent = computed(() => (overview.value?.memory.usage ?? 0).toFixed(1))
 const diskPercent = computed(() => (overview.value?.disk.usage ?? 0).toFixed(1))
 
-function formatBytes(mb: number | undefined | null): string {
-  if (mb == null || isNaN(mb)) return '0 MB'
-  if (mb >= 1024) return (mb / 1024).toFixed(1) + ' GB'
-  return mb.toFixed(0) + ' MB'
-}
 
 function formatSpeed(kbps: number | undefined | null): string {
   if (kbps == null || isNaN(kbps)) return '0 KB/s'
@@ -61,39 +72,80 @@ function initChart() {
   updateChart()
 }
 
+let lastPoints: { timestamp: number; cpu: number; memory: number }[] | null = null
+
+// 各范围的聚合桶秒数（与后端 GetMetrics 保持一致），用于识别采集断档
+const BUCKET_SEC: Record<string, number> = { '1h': 60, '6h': 300, '24h': 3600, '7d': 3600 }
+
 function updateChart(data?: { timestamp: number; cpu: number; memory: number }[]) {
   if (!chartInstance) return
+  if (data) lastPoints = data
 
-  const points = data || generateMockData()
-  const times = points.map((p) => {
-    const d = new Date(p.timestamp)
-    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  // 空态与有数据走同一个完整 option 结构（series 始终带 type/lineStyle），
+  // 避免 merge setOption 时 series 结构差异导致 ECharts 报 coordinateSystem 错误，
+  // 也避免空态 title 在数据回来后残留
+  const points = data || lastPoints || []
+  updateChartAria(points)
+
+  // 后端 timestamp 为 Unix 秒；时间轴按真实时间间隔排布，
+  // 采集断档（面板停机/重启）处用 null 断开，避免 category 轴把空洞压缩成相邻点造成趋势失真
+  const fmtTime = (ms: number) => {
+    const d = new Date(ms)
+    const mmdd = `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    const hhmm = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+    if (metricRange.value === '7d' || metricRange.value === '24h') return `${mmdd} ${hhmm}`
+    return hhmm
+  }
+  // 相邻点间隔超过 2 个聚合桶即视为断档，插入 null 让折线断开
+  const gapLimit = (BUCKET_SEC[metricRange.value] || 3600) * 2 * 1000
+  const cpuData: [number, number | null][] = []
+  const memData: [number, number | null][] = []
+  points.forEach((p, i) => {
+    const ms = p.timestamp * 1000
+    if (i > 0 && ms - points[i - 1].timestamp * 1000 > gapLimit) {
+      cpuData.push([ms, null])
+      memData.push([ms, null])
+    }
+    cpuData.push([ms, p.cpu])
+    memData.push([ms, p.memory])
   })
-  const cpuData = points.map((p) => p.cpu)
-  const memData = points.map((p) => p.memory)
 
   const tk = tokens.value
   const textColor = tk.sub || '#9aa5b8'
   const lineColor = tk.line || '#2a3348'
+  // CPU 用主撞色青绿，内存用信息蓝 —— 两线必须强区分，同色系双线在趋势图上不可读
   const cpuColor = tk.acc || '#1ba784'
-  const memColor = tk.acc2 || '#2dd4a8'
+  const memColor = tk.info || '#60a5fa'
+  const faintColor = tk.faint || '#8b95a8'
+  // 图表字号统一走 token（审计 D01：12/13px 散点 → --fs-caption 一档）
+  const fsCaption = fsPx('--fs-caption', 12)
 
   const cpuLabel = t('dashboard.cpu')
   const memLabel = t('dashboard.memory')
+  const isEmpty = points.length === 0
 
   chartInstance.setOption({
+    title: isEmpty
+      ? {
+          text: t('common.noData'),
+          left: 'center',
+          top: 'middle',
+          textStyle: { color: faintColor, fontSize: fsCaption, fontWeight: 400 }
+        }
+      : { show: false },
     grid: { top: 40, right: 20, bottom: 30, left: 50 },
     tooltip: {
       trigger: 'axis',
       backgroundColor: tk.surface || '#1a2030',
       borderColor: tk.line || '#2a3348',
-      textStyle: { color: tk.ink || '#e8ecf2', fontSize: 12 },
+      textStyle: { color: tk.ink || '#e8ecf2', fontSize: fsCaption },
       formatter: (params: any) => {
-        let html = `<div style="font-weight:600;margin-bottom:4px">${params[0].axisValue}</div>`
+        let html = `<div style="font-weight:600;margin-bottom:var(--space-1)">${fmtTime(params[0].value[0])}</div>`
         params.forEach((p: any) => {
-          html += `<div style="display:flex;align-items:center;gap:6px">
+          const v = p.value[1]
+          html += `<div style="display:flex;align-items:center;gap:var(--space-2)">
             <span style="width:8px;height:8px;border-radius:50%;background:${p.color}"></span>
-            ${p.seriesName}: <span style="font-family:monospace;font-weight:600">${p.value}%</span>
+            ${p.seriesName}: <span style="font-family:monospace;font-weight:600">${v == null ? '—' : v.toFixed(1) + '%'}</span>
           </div>`
         })
         return html
@@ -103,23 +155,23 @@ function updateChart(data?: { timestamp: number; cpu: number; memory: number }[]
       data: [cpuLabel, memLabel],
       top: 8,
       right: 20,
-      textStyle: { color: textColor, fontSize: 12 },
+      textStyle: { color: textColor, fontSize: fsCaption },
       itemWidth: 12,
       itemHeight: 8
     },
     xAxis: {
-      type: 'category',
-      data: times,
+      type: 'time',
       axisLine: { lineStyle: { color: lineColor } },
-      axisLabel: { color: textColor, fontSize: 11 },
-      axisTick: { show: false }
+      axisLabel: { color: textColor, fontSize: fsCaption, formatter: (val: number) => fmtTime(val) },
+      axisTick: { show: false },
+      splitLine: { show: false }
     },
     yAxis: {
       type: 'value',
       max: 100,
       axisLine: { show: false },
       axisTick: { show: false },
-      axisLabel: { color: textColor, fontSize: 11, formatter: '{value}%' },
+      axisLabel: { color: textColor, fontSize: fsCaption, formatter: '{value}%' },
       splitLine: { lineStyle: { color: lineColor, type: 'dashed' } }
     },
     series: [
@@ -127,6 +179,7 @@ function updateChart(data?: { timestamp: number; cpu: number; memory: number }[]
         name: cpuLabel,
         type: 'line',
         data: cpuData,
+        connectNulls: false,
         smooth: true,
         symbol: 'none',
         lineStyle: { width: 2, color: cpuColor },
@@ -141,6 +194,7 @@ function updateChart(data?: { timestamp: number; cpu: number; memory: number }[]
         name: memLabel,
         type: 'line',
         data: memData,
+        connectNulls: false,
         smooth: true,
         symbol: 'none',
         lineStyle: { width: 2, color: memColor },
@@ -155,19 +209,6 @@ function updateChart(data?: { timestamp: number; cpu: number; memory: number }[]
   })
 }
 
-function generateMockData() {
-  const points = []
-  const now = Date.now()
-  for (let i = 23; i >= 0; i--) {
-    points.push({
-      timestamp: now - i * 3600000,
-      cpu: Math.round(20 + Math.random() * 40),
-      memory: Math.round(40 + Math.random() * 30)
-    })
-  }
-  return points
-}
-
 async function loadData() {
   loading.value = true
   try {
@@ -180,20 +221,10 @@ async function loadData() {
     if (ovRes?.data) {
       overview.value = normalizeOverview(ovRes.data)
     } else {
-      // Mock data for development
-      overview.value = {
-        cpu: { usage: 23, cores: 4 },
-        memory: { usedGB: 4.2, totalGB: 8, usage: 52 },
-        disk: { usedGB: 27.2, totalGB: 40, usage: 68 },
-        network: { uploadKbps: 2.1 * 1024, downloadKbps: 5.3 * 1024 },
-        uptime: 86400 * 15,
-        hostname: 'cloudpivot-node-01',
-        os: 'Ubuntu 22.04 LTS',
-        panelVersion: 'v1.0.0'
-      }
+      overview.value = null
     }
 
-    if (metricsRes?.data?.points) {
+    if (metricsRes?.data?.points && metricsRes.data.points.length > 0) {
       updateChart(metricsRes.data.points)
     } else {
       updateChart()
@@ -202,13 +233,7 @@ async function loadData() {
     if (logsRes?.data?.items) {
       auditLogs.value = logsRes.data.items
     } else {
-      auditLogs.value = [
-        { id: 1, user: 'admin', action: '创建站点', target: 'example.com', result: 'success', timestamp: '2026-09-08 14:32:15' },
-        { id: 2, user: 'admin', action: '重启服务', target: 'Nginx', result: 'success', timestamp: '2026-09-08 14:10:03' },
-        { id: 3, user: 'system', action: '备份完成', target: 'daily-backup', result: 'success', timestamp: '2026-09-08 13:55:00' },
-        { id: 4, user: 'admin', action: '安装应用', target: 'MySQL 8.0', result: 'success', timestamp: '2026-09-08 12:30:22' },
-        { id: 5, user: 'admin', action: '登录失败', target: '192.168.1.100', result: 'failed', timestamp: '2026-09-08 11:45:08' }
-      ]
+      auditLogs.value = []
     }
   } finally {
     loading.value = false
@@ -219,7 +244,8 @@ function handleRangeChange(range: string) {
   metricRange.value = range
   getMetrics(range)
     .then((res) => {
-      if (res.data?.points) updateChart(res.data.points)
+      if (res.data?.points && res.data.points.length > 0) updateChart(res.data.points)
+      else updateChart()
     })
     .catch(() => updateChart())
 }
@@ -316,8 +342,6 @@ watch(locale, () => {
           :value="cpuPercent"
           unit="%"
           :subtitle="`${overview?.cpu.cores || 4} ${t('dashboard.cores')}`"
-          :trend="2.3"
-          :trend-label="t('dashboard.comparedYesterday')"
           :loading="loading"
           accent="acc"
         />
@@ -328,8 +352,6 @@ watch(locale, () => {
           :value="memPercent"
           unit="%"
           :subtitle="`${overview ? overview.memory.usedGB.toFixed(1) : '—'} / ${overview ? overview.memory.totalGB.toFixed(0) : 8} GB`"
-          :trend="-1.2"
-          :trend-label="t('dashboard.comparedYesterday')"
           :loading="loading"
           accent="acc2"
         />
@@ -340,8 +362,6 @@ watch(locale, () => {
           :value="diskPercent"
           unit="%"
           :subtitle="`${overview ? overview.disk.usedGB.toFixed(1) : '—'} / ${overview ? overview.disk.totalGB.toFixed(1) : 40} GB`"
-          :trend="0.5"
-          :trend-label="t('dashboard.comparedYesterday')"
           :loading="loading"
           accent="warn"
         />
@@ -367,23 +387,20 @@ watch(locale, () => {
     <NGrid cols="1 l:3" :x-gap="16" :y-gap="16" responsive="screen" class="dashboard__main">
       <NGi :span="3" class="dashboard__chart-col">
         <PageCard :title="t('dashboard.resourceTrend')" :subtitle="t('dashboard.resourceTrendSubtitle')">
-          <template #subtitle>
-            <div class="chart-header">
-              <span>{{ t('dashboard.cpuMemoryUsage') }}</span>
-              <NSpace size="small">
-                <NButton
-                  v-for="opt in rangeOptions"
-                  :key="opt.value"
-                  size="tiny"
-                  :type="metricRange === opt.value ? 'primary' : 'default'"
-                  @click="handleRangeChange(opt.value)"
-                >
-                  {{ opt.label }}
-                </NButton>
-              </NSpace>
-            </div>
+          <template #extra>
+            <NSpace size="small" align="center">
+              <NButton
+                v-for="opt in rangeOptions"
+                :key="opt.value"
+                size="tiny"
+                :type="metricRange === opt.value ? 'primary' : 'default'"
+                @click="handleRangeChange(opt.value)"
+              >
+                {{ opt.label }}
+              </NButton>
+            </NSpace>
           </template>
-          <div ref="chartRef" class="dashboard__chart" />
+          <div ref="chartRef" class="dashboard__chart" role="img" :aria-label="chartAriaLabel" />
         </PageCard>
       </NGi>
       <NGi :span="3" class="dashboard__audit-col">
@@ -417,7 +434,7 @@ watch(locale, () => {
 .dashboard {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--space-6);
 }
 
 .dashboard__sysbar {
@@ -438,7 +455,7 @@ watch(locale, () => {
 }
 
 .sysbar-label {
-  color: var(--faint);
+  color: var(--text-quaternary);
 }
 
 .sysbar-value {
@@ -466,13 +483,6 @@ watch(locale, () => {
 
 .dashboard__main {
   margin: 0;
-}
-
-.chart-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
 }
 
 .dashboard__chart {
@@ -549,7 +559,7 @@ watch(locale, () => {
 
 .audit-item__time {
   font-size: var(--fs-caption);
-  color: var(--faint);
+  color: var(--text-quaternary);
 }
 
 .audit-item__user {
@@ -557,18 +567,18 @@ watch(locale, () => {
   align-items: center;
   gap: var(--space-1);
   font-size: var(--fs-caption);
-  color: var(--faint);
+  color: var(--text-quaternary);
 }
 
 .audit-empty {
   text-align: center;
   padding: var(--space-6);
-  color: var(--faint);
+  color: var(--text-quaternary);
   font-size: var(--fs-caption);
 }
 
 .dashboard__net-sep {
-  color: var(--faint);
+  color: var(--text-quaternary);
   margin: 0 var(--space-1);
 }
 
@@ -614,7 +624,7 @@ watch(locale, () => {
   .sysbar-item {
     flex-direction: column;
     align-items: flex-start;
-    gap: 2px;
+    gap: var(--space-0);
   }
   .sysbar-label {
     font-size: 10px;
@@ -649,13 +659,9 @@ watch(locale, () => {
   }
 
   /* 图表头部按钮缩小 */
-  .chart-header {
-    flex-wrap: wrap;
-    gap: var(--space-2);
-  }
-  .chart-header .n-button {
+  .page-card__header-right .n-button {
     font-size: 11px;
-    padding: 0 8px;
+    padding: 0 var(--space-2);
   }
 
   /* 审计日志：简化 */

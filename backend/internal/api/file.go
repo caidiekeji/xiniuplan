@@ -31,6 +31,9 @@ func initFileManager() *filesvc.Manager {
 	return fileManager
 }
 
+// SharedFileManager 供 main.go 装配新功能路由复用同一个文件管理器实例
+func SharedFileManager() *filesvc.Manager { return initFileManager() }
+
 // RegisterFileRoutes 注册文件管理器路由
 func RegisterFileRoutes(r *gin.RouterGroup) {
 	m := initFileManager()
@@ -43,6 +46,34 @@ func RegisterFileRoutes(r *gin.RouterGroup) {
 			return
 		}
 		common.Success(c, data)
+	})
+
+	// 文件权限管理（F-005）：chmod / chown
+	r.POST("/files/permission", middleware.RequirePermission(model.PermFileUpdate), func(c *gin.Context) {
+		var req struct {
+			Path      string `json:"path" binding:"required"`
+			Mode      string `json:"mode"` // 八进制权限，如 644
+			Owner     string `json:"owner"`
+			Group     string `json:"group"`
+			Recursive bool   `json:"recursive"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
+			common.Fail(c, common.CodeParamError, "参数错误: "+err.Error())
+			return
+		}
+		if req.Mode != "" {
+			if err := m.SetPermission(req.Path, req.Mode, req.Recursive); err != nil {
+				common.Fail(c, common.CodeServerError, err.Error())
+				return
+			}
+		}
+		if req.Owner != "" || req.Group != "" {
+			if err := m.SetOwner(req.Path, req.Owner, req.Group, req.Recursive); err != nil {
+				common.Fail(c, common.CodeServerError, err.Error())
+				return
+			}
+		}
+		common.Success(c, gin.H{"updated": true})
 	})
 
 	r.POST("/files/mkdir", middleware.RequirePermission(model.PermFileCreate), func(c *gin.Context) {
@@ -184,11 +215,20 @@ func RegisterFileRoutes(r *gin.RouterGroup) {
 			return
 		}
 		paths := strings.Split(pathsStr, ",")
+		if c.Query("forever") == "1" {
+			if err := m.DeleteForever(paths); err != nil {
+				common.Fail(c, common.CodeServerError, err.Error())
+				return
+			}
+			common.Success(c, gin.H{"recycled": false})
+			return
+		}
 		if err := m.Delete(paths); err != nil {
 			common.Fail(c, common.CodeServerError, err.Error())
 			return
 		}
-		common.Success(c, nil)
+		m.RecordRecycle(paths, model.DB)
+		common.Success(c, gin.H{"recycled": true})
 	})
 
 	r.POST("/files/compress", middleware.RequirePermission(model.PermFileCreate), func(c *gin.Context) {

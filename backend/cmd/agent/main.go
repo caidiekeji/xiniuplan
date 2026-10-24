@@ -18,10 +18,17 @@ import (
 	"cloudpivot/internal/config"
 	"cloudpivot/internal/middleware"
 	"cloudpivot/internal/model"
+	aisvc "cloudpivot/internal/service/ai"
 	alertservice "cloudpivot/internal/service/alert"
 	authsvc "cloudpivot/internal/service/auth"
+	containersvc "cloudpivot/internal/service/container"
 	cronsvc "cloudpivot/internal/service/cron"
+	daemonsvc "cloudpivot/internal/service/daemon"
+	deploysvc "cloudpivot/internal/service/deploy"
 	monitorsvc "cloudpivot/internal/service/monitor"
+	nodesvc "cloudpivot/internal/service/node"
+	sitesvc "cloudpivot/internal/service/site"
+	systemsvc "cloudpivot/internal/service/system"
 
 	"github.com/gin-gonic/gin"
 )
@@ -71,7 +78,8 @@ func main() {
 
 	monitorService := monitorsvc.NewService(db, collector)
 
-	// 计划任务引擎
+	// 计划任务引擎（先补齐内置任务：SSL 检查/Docker 清理/回收站清理/防篡改/病毒扫描）
+	cronsvc.EnsureDefaultTasks(db)
 	cronEngine := cronsvc.InitCronEngine(db)
 	defer cronEngine.Stop()
 	slog.Info("[犀牛面板] 计划任务引擎已启动")
@@ -82,10 +90,44 @@ func main() {
 	defer alertEngine.Stop()
 	slog.Info("[犀牛面板] 告警引擎已启动")
 
+	notifier := alertservice.NewNotifierManager(db)
+
+	// 拨测服务（roadmap #6）
+	probeSvc := monitorsvc.NewProbeService(db, notifier)
+	probeSvc.Start()
+	defer probeSvc.Stop()
+
+	// 多节点管理（roadmap #13）
+	nodeSvc := nodesvc.NewService(db)
+	nodeSvc.Start()
+	defer nodeSvc.Stop()
+
+	// 进程守护（roadmap #11）：崩溃自恢复 + 面板启动时恢复
+	daemonSvc := daemonsvc.NewService(db, "")
+	daemonSvc.StartService()
+
+	// 新功能服务装配（拨测/守护/Git部署/Compose/构建/文件/AI/防篡改）
+	deploySvc := deploysvc.NewService(db, notifier)
+	siteSvc := sitesvc.NewService(db)
+	// 站点目录按配置注入（默认相对面板工作目录，保证默认可写；
+	// 此前硬编码 /www 与 /opt/cloudpivot/runtime/... 在服务器上不存在）
+	sitesvc.ConfigureSitePaths(cfg.Site.RootDir, cfg.Site.NginxConfDir, cfg.Site.SSLDir)
+	api.SetFeatureServices(
+		probeSvc,
+		daemonSvc,
+		deploySvc,
+		containersvc.NewService(),
+		api.SharedFileManager(),
+		systemsvc.NewService(db),
+		siteSvc,
+	)
+	api.SetNotifier(notifier)
+	slog.Info("[犀牛面板] 新功能服务已装配")
+
 	// 5. 初始化路由
 	gin.SetMode(cfg.Server.Mode)
 	r := gin.New()
-	r.Use(gin.Logger(), gin.Recovery())
+	r.Use(middleware.SanitizedLogger(), gin.Recovery()) // 安全日志：query 中 token 脱敏
 
 	// 中间件
 	r.Use(middleware.CORS())
@@ -105,6 +147,9 @@ func main() {
 	v1.POST("/auth/refresh", authHandler.Refresh)
 	v1.POST("/auth/forgot-password", authHandler.ForgotPassword)
 	v1.POST("/auth/reset-password", authHandler.ResetPassword)
+
+	// 面板间备份接收（X-Panel-Token 认证，BK-008 异地容灾）
+	api.RegisterBackupReceiveRoutes(v1)
 	// 入口探测：前端用于判断是否启用了安全入口
 	v1.GET("/panel/ping", func(c *gin.Context) {
 		c.JSON(200, gin.H{"ok": true, "version": monitorsvc.PanelVersion})
@@ -177,6 +222,27 @@ func main() {
 
 		// SSH 安全
 		api.RegisterSSHRoutes(authGroup)
+
+		// ===== roadmap 新功能路由 =====
+		// 网站拨测
+		(&api.ProbeAPI{Svc: probeSvc}).Register(authGroup)
+		// 进程守护
+		(&api.DaemonAPI{Svc: daemonSvc}).Register(authGroup)
+		// Git 推送部署（webhook 免登录，sign 校验）
+		(&api.DeployAPI{Svc: deploySvc}).Register(authGroup, v1)
+		// Compose 编排 + 镜像构建
+		(&api.ComposeAPI{}).Register(authGroup)
+		(&api.BuildAPI{}).Register(authGroup)
+		// AI 运维助手
+		(&api.AIAPI{Svc: aisvc.NewService(db)}).Register(authGroup)
+		// 网站防篡改
+		(&api.IntegrityAPI{Svc: siteSvc}).Register(authGroup)
+		// 文件回收站
+		(&api.RecycleAPI{}).Register(authGroup)
+		// 面板一键自升级
+		(&api.UpgradeAPI{}).Register(authGroup)
+		// 多节点管理
+		api.RegisterNodeRoutes(authGroup, nodeSvc)
 	}
 
 	// 健康检查
@@ -194,8 +260,17 @@ func main() {
 	fileServer := http.FileServer(http.FS(distFS))
 	r.NoRoute(func(c *gin.Context) {
 		p := c.Request.URL.Path
-		if strings.HasPrefix(p, "/api/") || p == "/health" {
+		// 含 /api/ 段的路径（可能是安全入口前缀后的 API，如 /admin-xyz/api/v1/...）
+		// 一律返回 404 JSON，不做 SPA 回退——否则前端的安全入口探测请求会拿到
+		// 一份 index.html，解析 JSON 失败后再串行重试，白等一个 RTT 往返
+		// （2026-10-23 实测 /dashboard/api/v1/panel/ping 回退 HTML，首屏探测阻塞 2 秒）
+		if isAPIPath(p) || p == "/health" {
 			c.JSON(404, gin.H{"code": 404, "message": "not found"})
+			return
+		}
+		// index.html（含 SPA 回退）：注入访问前缀，前端免去运行时探测请求
+		if p == "/index.html" {
+			c.Data(200, "text/html; charset=utf-8", panelIndexHTML(distFS))
 			return
 		}
 		// 尝试提供真实文件（assets、favicon 等）
@@ -206,12 +281,7 @@ func main() {
 			return
 		}
 		// SPA 回退
-		index, err2 := fs.ReadFile(distFS, "index.html")
-		if err2 != nil {
-			c.String(500, "frontend assets unavailable")
-			return
-		}
-		c.Data(200, "text/html; charset=utf-8", index)
+		c.Data(200, "text/html; charset=utf-8", panelIndexHTML(distFS))
 	})
 
 	// 6. 启动 HTTP/HTTPS 服务
@@ -254,4 +324,36 @@ func main() {
 	}
 
 	slog.Info("[犀牛面板] 服务已优雅关闭")
+}
+
+// isAPIPath 判断路径中是否包含 /api/ 段。
+//
+// 除根路径的 /api/ 外，安全入口模式下的 /{entry}/api/v1/... 也属于 API 路径，
+// 不应被 SPA 回退成 index.html（前端安全入口探测依赖该路径返回 JSON）。
+func isAPIPath(p string) bool {
+	if strings.HasPrefix(p, "/api/") {
+		return true
+	}
+	return strings.Contains(p, "/api/")
+}
+
+// panelBasePlaceholder index.html 中的访问前缀占位符
+const panelBasePlaceholder = "<!--__PANEL_BASE__-->"
+
+// panelIndexHTML 读取 index.html 并注入访问前缀。
+//
+// 后端本就持有安全入口配置（middleware.GetSecurityEntry），把前缀直接写进
+// HTML，前端就不必在首屏发探测请求去猜——那次探测是串行阻塞点，
+// 实测可达 1.5~2 秒（2026-10-23）。
+func panelIndexHTML(distFS fs.FS) []byte {
+	index, err := fs.ReadFile(distFS, "index.html")
+	if err != nil {
+		return []byte("<!doctype html><html><body>frontend assets unavailable</body></html>")
+	}
+	base := ""
+	if entry := middleware.GetSecurityEntry(); entry != "" {
+		base = "/" + entry
+	}
+	injected := `<script>window.__PANEL_BASE__="` + base + `";</script>`
+	return []byte(strings.Replace(string(index), panelBasePlaceholder, injected, 1))
 }

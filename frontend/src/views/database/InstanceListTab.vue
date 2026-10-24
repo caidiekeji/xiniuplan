@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, h } from 'vue'
-import { useMessage } from 'naive-ui'
+import { useI18n } from 'vue-i18n'
+import { useMessage } from '@/composables/useMessage'
 import {
   NButton, NSpace, NIcon, NInput, NInputNumber, NRadioGroup, NRadio,
   NFormItem, NEmpty, NModal, NAlert
@@ -10,7 +11,7 @@ import {
   AddOutline, TrashOutline, PlayOutline, StopOutline,
   RefreshOutline, ConstructOutline, CloudDownloadOutline, SearchOutline
 } from '@vicons/ionicons5'
-import { DataTable, ModalForm, StatusTag, ConfirmDialog } from '@/components'
+import { DataTable, ModalForm, ContentModal, StatusTag, ConfirmDialog } from '@/components'
 import type { StatusType } from '@/components'
 import * as dbApi from '@/api/database'
 import type { DBInstance, CreateInstanceData, DBType } from '@/api/database'
@@ -18,6 +19,7 @@ import { DB_VERSION_OPTIONS, DB_DEFAULT_PORT, DB_TYPE_LABELS } from '@/api/datab
 import { monoEl, iconBtn, btnGroup, formatTime, typeTag } from './shared'
 
 const message = useMessage()
+const { t } = useI18n()
 
 /* ==================== Props / Emits ==================== */
 
@@ -38,46 +40,46 @@ const emit = defineEmits<{
 
 /* ==================== 列定义 ==================== */
 
-const instanceColumns: DataTableColumns = [
-  { title: '实例名', key: 'name', width: 160 },
+const instanceColumns = computed<DataTableColumns>(() => [
+  { title: t('database.instances.columns.name'), key: 'name', width: 160 },
   {
-    title: '类型', key: 'type', width: 130,
+    title: t('database.instances.columns.type'), key: 'type', width: 130,
     render: (row: any) => typeTag(row.type as DBType)
   },
   {
-    title: '版本', key: 'version', width: 100,
+    title: t('database.instances.columns.version'), key: 'version', width: 100,
     render: (row: any) => monoEl(row.version)
   },
-  { title: '端口', key: 'port', width: 80, render: (row: any) => monoEl(row.port) },
+  { title: t('database.instances.columns.port'), key: 'port', width: 80, render: (row: any) => monoEl(row.port) },
   {
-    title: '状态', key: 'status', width: 100,
+    title: t('database.instances.columns.status'), key: 'status', width: 100,
     render: (row: any) => h(StatusTag, { status: row.status as StatusType })
   },
   {
-    title: '容器ID', key: 'container_id', width: 140,
+    title: t('database.instances.columns.containerId'), key: 'container_id', width: 140,
     render: (row: any) => monoEl(row.container_id?.substring(0, 12))
   },
   {
-    title: '创建时间', key: 'created_at', width: 170,
+    title: t('database.instances.columns.createdAt'), key: 'created_at', width: 170,
     render: (row: any) => formatTime(row.created_at)
   },
   {
-    title: '操作', key: 'actions', width: 280,
+    title: t('database.instances.columns.actions'), key: 'actions', width: 280,
     render: (row: any) => {
       const isRunning = row.status === 'running'
       const children: any[] = []
       if (!isRunning) {
-        children.push(iconBtn({ text: '启动', icon: PlayOutline, type: 'success', onClick: () => handleStart(row) }))
+        children.push(iconBtn({ text: t('database.instances.start'), icon: PlayOutline, type: 'success', onClick: () => handleStart(row) }))
       } else {
-        children.push(iconBtn({ text: '停止', icon: StopOutline, type: 'warning', onClick: () => handleStop(row) }))
+        children.push(iconBtn({ text: t('database.instances.stop'), icon: StopOutline, type: 'warning', onClick: () => handleStop(row) }))
       }
-      children.push(iconBtn({ text: '重启', icon: RefreshOutline, onClick: () => handleRestart(row) }))
-      children.push(iconBtn({ text: '管理', icon: ConstructOutline, type: 'primary', onClick: () => handleManage(row) }))
-      children.push(iconBtn({ text: '删除', icon: TrashOutline, type: 'error', onClick: () => confirmDeleteInstance(row) }))
+      children.push(iconBtn({ text: t('database.instances.restart'), icon: RefreshOutline, onClick: () => handleRestart(row) }))
+      children.push(iconBtn({ text: t('database.instances.manage'), icon: ConstructOutline, type: 'primary', onClick: () => handleManage(row) }))
+      children.push(iconBtn({ text: t('database.common.delete'), icon: TrashOutline, type: 'error', onClick: () => confirmDeleteInstance(row) }))
       return btnGroup(children)
     }
   }
-]
+])
 
 const pagination = computed(() => ({
   page: props.page,
@@ -94,30 +96,30 @@ const pagination = computed(() => ({
 async function handleStart(row: any) {
   try {
     await dbApi.startInstance(row.id)
-    message.success(`实例 ${row.name} 已启动`)
+    message.success(t('database.instances.started', { name: row.name }))
     emit('refresh')
   } catch (e: any) {
-    message.error(e.message || '启动失败')
+    message.error(e.message || t('database.instances.startFailed'))
   }
 }
 
 async function handleStop(row: any) {
   try {
     await dbApi.stopInstance(row.id)
-    message.success(`实例 ${row.name} 已停止`)
+    message.success(t('database.instances.stopped', { name: row.name }))
     emit('refresh')
   } catch (e: any) {
-    message.error(e.message || '停止失败')
+    message.error(e.message || t('database.instances.stopFailed'))
   }
 }
 
 async function handleRestart(row: any) {
   try {
     await dbApi.restartInstance(row.id)
-    message.success(`实例 ${row.name} 已重启`)
+    message.success(t('database.instances.restarted', { name: row.name }))
     emit('refresh')
   } catch (e: any) {
-    message.error(e.message || '重启失败')
+    message.error(e.message || t('database.instances.restartFailed'))
   }
 }
 
@@ -161,11 +163,11 @@ async function submitCreateInstance() {
     if (!data.root_password) delete data.root_password
     if (!data.port) delete data.port
     await dbApi.createInstance(data)
-    message.success('实例创建成功')
+    message.success(t('database.instances.createSuccess'))
     createInstanceModal.value = false
     emit('refresh')
   } catch (e: any) {
-    message.error(e.message || '创建失败')
+    message.error(e.message || t('database.instances.createFailed'))
   } finally {
     createInstanceLoading.value = false
   }
@@ -199,10 +201,10 @@ async function handleDiscover() {
     const res = await dbApi.discoverInstances()
     discovered.value = res.data
     if (res.data.length === 0) {
-      message.info('未在本机发现运行中的数据库（已探测 3306/5432/6379 端口）')
+      message.info(t('database.instances.discoverNone'))
     }
   } catch (e: any) {
-    message.error(e.message || '探测失败')
+    message.error(e.message || t('database.instances.discoverFailed'))
   } finally {
     discoverLoading.value = false
   }
@@ -229,11 +231,11 @@ async function submitImport() {
     if (!data.version) delete data.version
     if (!data.remark) delete data.remark
     await dbApi.importInstance(data)
-    message.success('实例导入成功')
+    message.success(t('database.instances.importSuccess'))
     importModal.value = false
     emit('refresh')
   } catch (e: any) {
-    message.error(e.message || '导入失败')
+    message.error(e.message || t('database.instances.importFailed'))
   } finally {
     importLoading.value = false
   }
@@ -255,11 +257,11 @@ async function doDeleteInstance() {
   deleteInstanceLoading.value = true
   try {
     await dbApi.deleteInstance(targetInstance.value.id)
-    message.success(`实例 ${targetInstance.value.name} 已删除`)
+    message.success(t('database.instances.deleted', { name: targetInstance.value.name }))
     deleteInstanceConfirm.value = false
     emit('refresh')
   } catch (e: any) {
-    message.error(e.message || '删除失败')
+    message.error(e.message || t('database.instances.deleteFailed'))
   } finally {
     deleteInstanceLoading.value = false
   }
@@ -271,13 +273,13 @@ async function doDeleteInstance() {
     <div class="tab-toolbar">
       <NSpace>
         <NButton type="primary" @click="openCreateInstance">
-          <template #icon><NIcon><AddOutline /></NIcon></template>创建实例
+          <template #icon><NIcon><AddOutline /></NIcon></template>{{ t('database.instances.createInstance') }}
         </NButton>
         <NButton type="info" ghost @click="openImportModal">
-          <template #icon><NIcon><CloudDownloadOutline /></NIcon></template>导入已有实例
+          <template #icon><NIcon><CloudDownloadOutline /></NIcon></template>{{ t('database.instances.importExisting') }}
         </NButton>
         <NButton @click="$emit('refresh')" :loading="loading">
-          <template #icon><NIcon><RefreshOutline /></NIcon></template>刷新
+          <template #icon><NIcon><RefreshOutline /></NIcon></template>{{ t('database.common.refresh') }}
         </NButton>
       </NSpace>
     </div>
@@ -290,20 +292,20 @@ async function doDeleteInstance() {
     />
 
     <div v-if="instances.length === 0 && !loading" class="empty-hint">
-      <NEmpty description="暂无数据库实例，点击上方按钮创建">
-        <NButton type="primary" size="small" @click="openCreateInstance">创建实例</NButton>
+      <NEmpty :description="t('database.instances.empty')">
+        <NButton type="primary" size="small" @click="openCreateInstance">{{ t('database.instances.createInstance') }}</NButton>
       </NEmpty>
     </div>
 
     <!-- 导入已有实例 -->
-    <NModal v-model:show="importModal" preset="card" title="导入已有数据库实例" :style="{ width: 'min(520px, 92vw)' }">
-      <NAlert type="info" :show-icon="true" style="margin-bottom: 14px;">
-        导入本机已安装但并非由面板创建的数据库实例（不会创建容器）。可先点击"自动探测"。
+    <ContentModal v-model:show="importModal" :title="t('database.instances.importModalTitle')" size="sm">
+      <NAlert type="info" :show-icon="true" style="margin-bottom: var(--space-4);">
+        {{ t('database.instances.importAlert') }}
       </NAlert>
 
-      <NSpace style="margin-bottom: 14px;">
+      <NSpace style="margin-bottom: var(--space-4);">
         <NButton size="small" :loading="discoverLoading" @click="handleDiscover">
-          <template #icon><NIcon><SearchOutline /></NIcon></template>自动探测本机数据库
+          <template #icon><NIcon><SearchOutline /></NIcon></template>{{ t('database.instances.discover') }}
         </NButton>
       </NSpace>
 
@@ -315,64 +317,64 @@ async function doDeleteInstance() {
           @click="useDiscovered(d)"
         >
           <span>{{ d.type.toUpperCase() }} @ {{ d.host }}:{{ d.port }}</span>
-          <span class="discover-item__ver">{{ d.version || '版本未知' }}</span>
-          <span class="discover-item__use">点击使用</span>
+          <span class="discover-item__ver">{{ d.version || t('database.instances.versionUnknown') }}</span>
+          <span class="discover-item__use">{{ t('database.instances.clickToUse') }}</span>
         </div>
       </div>
 
-      <NFormItem label="类型">
+      <NFormItem :label="t('database.instances.form.type')">
         <NRadioGroup :value="importForm.type" @update:value="onImportTypeChange">
           <NRadio value="mysql">MySQL</NRadio>
           <NRadio value="postgres">PostgreSQL</NRadio>
           <NRadio value="redis">Redis</NRadio>
         </NRadioGroup>
       </NFormItem>
-      <NFormItem label="地址">
+      <NFormItem :label="t('database.instances.form.host')">
         <NInput v-model:value="importForm.host" placeholder="127.0.0.1" />
       </NFormItem>
-      <NFormItem label="端口">
+      <NFormItem :label="t('database.instances.form.port')">
         <NInputNumber v-model:value="importForm.port" :min="1" :max="65535" style="width: 100%;" />
       </NFormItem>
-      <NFormItem v-if="importForm.type !== 'redis'" label="管理员用户名">
+      <NFormItem v-if="importForm.type !== 'redis'" :label="t('database.instances.form.username')">
         <NInput v-model:value="importForm.username" placeholder="root / postgres" />
       </NFormItem>
-      <NFormItem v-if="importForm.type !== 'redis'" label="管理员密码">
-        <NInput v-model:value="importForm.password" type="password" show-password-on="click" placeholder="可留空" />
+      <NFormItem v-if="importForm.type !== 'redis'" :label="t('database.instances.form.password')">
+        <NInput v-model:value="importForm.password" type="password" show-password-on="click" :placeholder="t('database.instances.form.passwordPlaceholder')" />
       </NFormItem>
-      <NFormItem label="备注">
-        <NInput v-model:value="importForm.remark" placeholder="可选" />
+      <NFormItem :label="t('database.instances.form.remark')">
+        <NInput v-model:value="importForm.remark" :placeholder="t('database.instances.form.optionalPlaceholder')" />
       </NFormItem>
 
       <template #footer>
         <NSpace justify="end">
-          <NButton @click="importModal = false">取消</NButton>
-          <NButton type="primary" :loading="importLoading" @click="submitImport">导入</NButton>
+          <NButton @click="importModal = false">{{ t('database.common.cancel') }}</NButton>
+          <NButton type="primary" :loading="importLoading" @click="submitImport">{{ t('database.instances.import') }}</NButton>
         </NSpace>
       </template>
-    </NModal>
+    </ContentModal>
 
     <!-- 创建实例 -->
     <ModalForm
       v-model:show="createInstanceModal"
-      title="创建数据库实例"
+      :title="t('database.instances.createModalTitle')"
       :loading="createInstanceLoading"
       @submit="submitCreateInstance"
     >
-      <NFormItem label="类型">
+      <NFormItem :label="t('database.instances.form.type')">
         <div class="type-cards">
           <div
-            v-for="t in (['mysql','postgres','redis'] as DBType[])"
-            :key="t"
+            v-for="tp in (['mysql','postgres','redis'] as DBType[])"
+            :key="tp"
             class="type-card"
-            :class="{ 'type-card--active': instanceForm.type === t }"
-            @click="onInstanceTypeChange(t)"
+            :class="{ 'type-card--active': instanceForm.type === tp }"
+            @click="onInstanceTypeChange(tp)"
           >
-            <span class="type-card__name">{{ DB_TYPE_LABELS[t] }}</span>
-            <span class="type-card__port">:{{ DB_DEFAULT_PORT[t] }}</span>
+            <span class="type-card__name">{{ DB_TYPE_LABELS[tp] }}</span>
+            <span class="type-card__port">:{{ DB_DEFAULT_PORT[tp] }}</span>
           </div>
         </div>
       </NFormItem>
-      <NFormItem label="版本">
+      <NFormItem :label="t('database.instances.form.version')">
         <NRadioGroup v-model:value="instanceForm.version">
           <NSpace>
             <NRadio v-for="opt in DB_VERSION_OPTIONS[instanceForm.type]" :key="opt.value" :value="opt.value">
@@ -381,26 +383,26 @@ async function doDeleteInstance() {
           </NSpace>
         </NRadioGroup>
       </NFormItem>
-      <NFormItem label="端口">
+      <NFormItem :label="t('database.instances.form.port')">
         <NInputNumber v-model:value="instanceForm.port" :placeholder="String(DB_DEFAULT_PORT[instanceForm.type])" :min="1" :max="65535" style="width: 100%" />
-        <div class="form-hint">默认端口 {{ DB_DEFAULT_PORT[instanceForm.type] }}，留空将自动分配可用端口</div>
+        <div class="form-hint">{{ t('database.instances.form.defaultPortHint', { port: DB_DEFAULT_PORT[instanceForm.type] }) }}</div>
       </NFormItem>
-      <NFormItem v-if="instanceForm.type !== 'redis'" label="root 密码">
-        <NInput v-model:value="instanceForm.root_password" type="password" show-password-on="click" placeholder="留空自动生成" />
-        <div class="form-hint">留空将自动生成强密码</div>
+      <NFormItem v-if="instanceForm.type !== 'redis'" :label="t('database.instances.form.rootPassword')">
+        <NInput v-model:value="instanceForm.root_password" type="password" show-password-on="click" :placeholder="t('database.instances.form.rootPasswordPlaceholder')" />
+        <div class="form-hint">{{ t('database.instances.form.rootPasswordHint') }}</div>
       </NFormItem>
-      <NFormItem label="备注">
-        <NInput v-model:value="instanceForm.remark" placeholder="可选" />
+      <NFormItem :label="t('database.instances.form.remark')">
+        <NInput v-model:value="instanceForm.remark" :placeholder="t('database.instances.form.optionalPlaceholder')" />
       </NFormItem>
     </ModalForm>
 
     <!-- 删除实例确认 -->
     <ConfirmDialog
       v-model:show="deleteInstanceConfirm"
-      title="删除实例"
-      :content="`确定要删除实例「${targetInstance?.name}」吗？此操作不可恢复，所有数据将丢失。`"
+      :title="t('database.instances.deleteModalTitle')"
+      :content="t('database.instances.deleteModalContent', { name: targetInstance?.name ?? '' })"
       type="error"
-      confirm-text="删除"
+      :confirm-text="t('database.common.delete')"
       :loading="deleteInstanceLoading"
       @confirm="doDeleteInstance"
     />
@@ -422,7 +424,7 @@ async function doDeleteInstance() {
 
 .form-hint {
   font-size: var(--fs-caption);
-  color: var(--faint);
+  color: var(--text-quaternary);
   margin-top: var(--space-1);
 }
 
@@ -438,7 +440,7 @@ async function doDeleteInstance() {
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
   cursor: pointer;
-  transition: all var(--t-fast) var(--ease);
+  transition: box-shadow var(--t-fast) var(--ease), transform var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -468,12 +470,12 @@ async function doDeleteInstance() {
 
 .type-card__port {
   font-size: var(--fs-caption);
-  color: var(--faint);
+  color: var(--text-quaternary);
   font-family: var(--font-mono);
 }
 
 .discover-list {
-  margin-bottom: 14px;
+  margin-bottom: var(--space-4);
   border: 1px solid var(--line);
   border-radius: 8px;
   overflow: hidden;
@@ -482,8 +484,8 @@ async function doDeleteInstance() {
 .discover-item {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 8px 12px;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
   font-size: 13px;
   cursor: pointer;
   transition: background var(--t-fast) var(--ease);
@@ -499,7 +501,7 @@ async function doDeleteInstance() {
 
 .discover-item__ver {
   flex: 1;
-  color: var(--faint);
+  color: var(--text-quaternary);
   font-family: var(--font-mono);
   font-size: 12px;
 }

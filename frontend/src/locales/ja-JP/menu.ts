@@ -1,4 +1,12 @@
 export default {
+  navLabel: 'メインナビゲーション',
+  groups: {
+    overview: '概要',
+    apps: 'アプリ',
+    ops: '運用',
+    security: 'セキュリティ',
+    system: 'システム'
+  },
   dashboard: 'ダッシュボード',
   website: 'ウェブサイト管理',
   database: 'データベース',
@@ -16,5 +24,12 @@ export default {
   ssl: 'SSL証明書',
   users: 'ユーザー管理',
   audit: '監査ログ',
-  settings: 'システム設定'
+  sessions: 'セッションとAPIキー',
+  settings: 'システム設定',
+  deploy: 'デプロイ',
+  daemon: 'デーモン監視',
+  probe: '疎通確認',
+  protection: '保護',
+  nodes: 'マルチノード',
+  ai: 'AIアシスタント'
 }

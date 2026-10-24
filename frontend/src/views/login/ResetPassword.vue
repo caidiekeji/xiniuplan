@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { ref, reactive, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { NCard, NForm, NFormItem, NInput, NButton, NAlert, NIcon } from 'naive-ui'
 import { LockClosedOutline, KeyOutline } from '@vicons/ionicons5'
 import { resetPassword } from '@/api/auth'
 
 const router = useRouter()
 const route = useRoute()
+const { t } = useI18n()
 
 const token = computed(() => (route.query.token as string) || '')
 
@@ -25,8 +27,8 @@ const rules = computed(() => ({
     required: true,
     trigger: ['blur', 'input'],
     validator: (_rule: any, value: string) => {
-      if (!value) return new Error('请输入新密码')
-      if (value.length < 6) return new Error('新密码至少 6 位')
+      if (!value) return new Error(t('resetPassword.rules.newPasswordRequired'))
+      if (value.length < 6) return new Error(t('resetPassword.rules.newPasswordMin'))
       return true
     }
   },
@@ -34,8 +36,8 @@ const rules = computed(() => ({
     required: true,
     trigger: ['blur', 'input'],
     validator: (_rule: any, value: string) => {
-      if (!value) return new Error('请再次输入新密码')
-      if (value !== form.newPassword) return new Error('两次输入的密码不一致')
+      if (!value) return new Error(t('resetPassword.rules.confirmPasswordRequired'))
+      if (value !== form.newPassword) return new Error(t('resetPassword.rules.passwordMismatch'))
       return true
     }
   }
@@ -55,7 +57,7 @@ async function handleSubmit() {
     successMsg.value = true
     setTimeout(() => router.push('/login'), 2000)
   } catch (err: any) {
-    errorMsg.value = err.message || '密码重置失败'
+    errorMsg.value = err.message || t('resetPassword.failed')
   } finally {
     loading.value = false
   }
@@ -70,12 +72,12 @@ async function handleSubmit() {
           <div class="rp-icon">
             <NIcon :size="30"><KeyOutline /></NIcon>
           </div>
-          <h2 class="rp-card__title">重置密码</h2>
-          <p class="rp-card__subtitle">请设置新的登录密码</p>
+          <h2 class="rp-card__title">{{ t('resetPassword.title') }}</h2>
+          <p class="rp-card__subtitle">{{ t('resetPassword.subtitle') }}</p>
         </div>
 
         <NAlert v-if="!token" type="error" :show-icon="true" class="rp-alert">
-          重置链接无效：缺少令牌参数，请从邮件中的链接进入
+          {{ t('resetPassword.invalidToken') }}
         </NAlert>
 
         <template v-else>
@@ -83,7 +85,7 @@ async function handleSubmit() {
             {{ errorMsg }}
           </NAlert>
           <NAlert v-if="successMsg" type="success" :show-icon="true" class="rp-alert">
-            密码重置成功，即将跳转到登录页…
+            {{ t('resetPassword.success') }}
           </NAlert>
 
           <NForm v-if="!successMsg" ref="formRef" :model="form" :rules="rules" size="large" @submit.prevent="handleSubmit">
@@ -92,7 +94,7 @@ async function handleSubmit() {
                 v-model:value="form.newPassword"
                 type="password"
                 show-password-on="click"
-                placeholder="新密码（至少 6 位）"
+                :placeholder="t('resetPassword.placeholders.newPassword')"
                 :input-props="{ autocomplete: 'new-password' }"
               >
                 <template #prefix>
@@ -106,7 +108,7 @@ async function handleSubmit() {
                 v-model:value="form.confirmPassword"
                 type="password"
                 show-password-on="click"
-                placeholder="确认新密码"
+                :placeholder="t('resetPassword.placeholders.confirmPassword')"
                 :input-props="{ autocomplete: 'new-password' }"
                 @keyup.enter="handleSubmit"
               >
@@ -118,14 +120,14 @@ async function handleSubmit() {
 
             <NFormItem>
               <NButton type="primary" block size="large" :loading="loading" @click="handleSubmit">
-                重置密码
+                {{ t('resetPassword.submit') }}
               </NButton>
             </NFormItem>
           </NForm>
         </template>
 
         <div class="rp-back">
-          <NButton text size="small" @click="router.push('/login')">返回登录</NButton>
+          <NButton text size="small" @click="router.push('/login')">{{ t('resetPassword.backToLogin') }}</NButton>
         </div>
       </NCard>
     </div>
@@ -152,11 +154,11 @@ async function handleSubmit() {
 
   &__header {
     text-align: center;
-    margin-bottom: 20px;
+    margin-bottom: var(--space-5);
   }
 
   &__title {
-    margin: 8px 0 6px;
+    margin: var(--space-2) 0 var(--space-1);
     font-size: 20px;
     font-weight: 600;
   }
@@ -164,7 +166,7 @@ async function handleSubmit() {
   &__subtitle {
     margin: 0;
     font-size: 13px;
-    color: var(--faint);
+    color: var(--text-quaternary);
   }
 }
 
@@ -175,16 +177,16 @@ async function handleSubmit() {
   width: 60px;
   height: 60px;
   border-radius: 16px;
-  color: #fff;
+  color: var(--on-color);
   background: linear-gradient(135deg, var(--info), var(--acc3-hover, var(--acc)));
 }
 
 .rp-alert {
-  margin-bottom: 16px;
+  margin-bottom: var(--space-4);
 }
 
 .rp-back {
   text-align: center;
-  margin-top: 8px;
+  margin-top: var(--space-2);
 }
 </style>

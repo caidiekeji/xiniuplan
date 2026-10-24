@@ -20,9 +20,12 @@ type DiskUsage struct {
 	UsagePercent float64 `json:"usage_percent"`
 }
 
-// NetworkStats 网络连接统计
+// NetworkStats 网络连接统计（字段名与前端 NetworkStats 接口对齐）
 type NetworkStats struct {
-	Established int `json:"established"`
-	Listening   int `json:"listening"`
-	Total       int `json:"total"`
+	TotalConnections int `json:"total_connections"`
+	Established      int `json:"established"`
+	Listening        int `json:"listening"`
+	TimeWait         int `json:"time_wait"`
+	CloseWait        int `json:"close_wait"`
+	Other            int `json:"other"`
 }

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, h } from 'vue'
-import { useMessage } from 'naive-ui'
+import { useI18n } from 'vue-i18n'
+import { useMessage } from '@/composables/useMessage'
 import {
   NButton, NSpace, NIcon, NSelect, NInput, NFormItem, NEmpty, NSpin
 } from 'naive-ui'
@@ -15,6 +16,7 @@ import type { DatabaseInfo, TableInfo, TableColumn, CreateDatabaseData } from '@
 import { monoEl, iconBtn, btnGroup, rowsToObjects, buildDynamicColumns, formatTime } from './shared'
 
 const message = useMessage()
+const { t } = useI18n()
 
 /* ==================== Props / Emits ==================== */
 
@@ -64,7 +66,7 @@ async function loadTables() {
     const res = await dbApi.getTables(props.instanceId, selectedDbName.value)
     tables.value = res.data
   } catch (e: any) {
-    message.error(e.message || '加载表列表失败')
+    message.error(e.message || t('database.manager.loadTablesFailed'))
   } finally {
     tablesLoading.value = false
   }
@@ -82,15 +84,15 @@ async function toggleTableStructure(tableName: string) {
     const res = await dbApi.getTableStructure(props.instanceId, selectedDbName.value, tableName)
     tableStructure.value = res.data
   } catch (e: any) {
-    message.error(e.message || '加载表结构失败')
+    message.error(e.message || t('database.manager.loadStructureFailed'))
   } finally {
     tableStructureLoading.value = false
   }
 }
 
-const tableColumnsDef: DataTableColumns = [
+const tableColumnsDef = computed<DataTableColumns>(() => [
   {
-    title: '表名', key: 'name', width: 220,
+    title: t('database.manager.columns.tableName'), key: 'name', width: 220,
     render: (row: any) =>
       h(
         NButton,
@@ -106,35 +108,35 @@ const tableColumnsDef: DataTableColumns = [
         }
       )
   },
-  { title: '引擎', key: 'engine', width: 100 },
+  { title: t('database.manager.columns.engine'), key: 'engine', width: 100 },
   {
-    title: '行数', key: 'rows', width: 100,
+    title: t('database.manager.columns.rows'), key: 'rows', width: 100,
     render: (row: any) => monoEl(row.rows?.toLocaleString() ?? 0)
   },
-  { title: '字符集', key: 'collation', width: 160 },
+  { title: t('database.manager.columns.collation'), key: 'collation', width: 160 },
   {
-    title: '创建时间', key: 'created_at', width: 170,
+    title: t('database.manager.columns.createdAt'), key: 'created_at', width: 170,
     render: (row: any) => formatTime(row.created_at)
   },
   {
-    title: '操作', key: 'actions', width: 200,
+    title: t('database.manager.columns.actions'), key: 'actions', width: 200,
     render: (row: any) =>
       btnGroup([
-        iconBtn({ text: '结构', icon: ConstructOutline, onClick: () => toggleTableStructure(row.name) }),
-        iconBtn({ text: '数据', icon: ServerOutline, type: 'primary', onClick: () => viewTableData(row.name) }),
-        iconBtn({ text: '删除', icon: TrashOutline, type: 'error', onClick: () => confirmDeleteTable(row) })
+        iconBtn({ text: t('database.manager.structure'), icon: ConstructOutline, onClick: () => toggleTableStructure(row.name) }),
+        iconBtn({ text: t('database.manager.data'), icon: ServerOutline, type: 'primary', onClick: () => viewTableData(row.name) }),
+        iconBtn({ text: t('database.common.delete'), icon: TrashOutline, type: 'error', onClick: () => confirmDeleteTable(row) })
       ])
   }
-]
+])
 
-const structureColumns: DataTableColumns = [
-  { title: '字段名', key: 'field', width: 180, render: (row: any) => monoEl(row.field) },
-  { title: '类型', key: 'type', width: 160, render: (row: any) => monoEl(row.type) },
-  { title: '允许空', key: 'null', width: 80 },
-  { title: '键', key: 'key', width: 80 },
-  { title: '默认值', key: 'default', width: 140, render: (row: any) => row.default ?? '-' },
-  { title: '额外', key: 'extra', width: 120 }
-]
+const structureColumns = computed<DataTableColumns>(() => [
+  { title: t('database.manager.columns.field'), key: 'field', width: 180, render: (row: any) => monoEl(row.field) },
+  { title: t('database.manager.columns.type'), key: 'type', width: 160, render: (row: any) => monoEl(row.type) },
+  { title: t('database.manager.columns.nullable'), key: 'null', width: 80 },
+  { title: t('database.manager.columns.key'), key: 'key', width: 80 },
+  { title: t('database.manager.columns.defaultValue'), key: 'default', width: 140, render: (row: any) => row.default ?? '-' },
+  { title: t('database.manager.columns.extra'), key: 'extra', width: 120 }
+])
 
 /* ==================== 表数据 ==================== */
 
@@ -169,7 +171,7 @@ async function loadTableData() {
     tableDataRows.value = rowsToObjects(res.data.columns, res.data.rows)
     tableDataTotal.value = res.data.total
   } catch (e: any) {
-    message.error(e.message || '加载表数据失败')
+    message.error(e.message || t('database.manager.loadDataFailed'))
   } finally {
     tableDataLoading.value = false
   }
@@ -219,18 +221,18 @@ function openCreateDb() {
 async function submitCreateDb() {
   if (!props.instanceId) return
   if (!dbForm.value.name) {
-    message.warning('请输入数据库名')
+    message.warning(t('database.manager.enterDbName'))
     return
   }
   createDbLoading.value = true
   try {
     await dbApi.createDatabase(props.instanceId, dbForm.value)
-    message.success('数据库创建成功')
+    message.success(t('database.manager.createSuccess'))
     createDbModal.value = false
     emit('loadDatabases')
     selectedDbName.value = dbForm.value.name
   } catch (e: any) {
-    message.error(e.message || '创建失败')
+    message.error(e.message || t('database.manager.createFailed'))
   } finally {
     createDbLoading.value = false
   }
@@ -252,14 +254,14 @@ async function doDeleteDb() {
   deleteDbLoading.value = true
   try {
     await dbApi.deleteDatabase(props.instanceId, targetDbName.value)
-    message.success(`数据库 ${targetDbName.value} 已删除`)
+    message.success(t('database.manager.dbDeleted', { name: targetDbName.value }))
     deleteDbConfirm.value = false
     if (selectedDbName.value === targetDbName.value) {
       selectedDbName.value = ''
     }
     emit('loadDatabases')
   } catch (e: any) {
-    message.error(e.message || '删除失败')
+    message.error(e.message || t('database.manager.deleteFailed'))
   } finally {
     deleteDbLoading.value = false
   }
@@ -277,7 +279,7 @@ function confirmDeleteTable(row: any) {
 }
 
 async function doDeleteTable() {
-  message.info('请在 SQL 执行器中执行 DROP TABLE 语句')
+  message.info(t('database.manager.useSqlExecutor'))
   deleteTableConfirm.value = false
 }
 
@@ -297,22 +299,22 @@ function onInstanceChange(val: number | null) {
       <NSpace>
         <NSelect
           :value="instanceId"
-          placeholder="选择 MySQL 实例"
+          :placeholder="t('database.common.selectMysqlInstance')"
           :options="instanceOptions"
           style="width: var(--input-3xl)"
           @update:value="onInstanceChange"
         />
         <NButton type="primary" :disabled="!instanceId" @click="openCreateDb">
-          <template #icon><NIcon><AddOutline /></NIcon></template>创建数据库
+          <template #icon><NIcon><AddOutline /></NIcon></template>{{ t('database.manager.createDb') }}
         </NButton>
         <NButton :disabled="!instanceId" @click="$emit('createUser')">
-          <template #icon><NIcon><PeopleOutline /></NIcon></template>创建用户
+          <template #icon><NIcon><PeopleOutline /></NIcon></template>{{ t('database.manager.createUser') }}
         </NButton>
       </NSpace>
     </div>
 
     <div v-if="!instanceId" class="empty-hint">
-      <NEmpty description="请先选择一个数据库实例" />
+      <NEmpty :description="t('database.common.selectInstance')" />
     </div>
 
     <div v-else class="schema-layout">
@@ -320,11 +322,11 @@ function onInstanceChange(val: number | null) {
       <div class="schema-sidebar">
         <div class="schema-sidebar__title">
           <NIcon :size="14"><FileTrayFullOutline /></NIcon>
-          <span>数据库</span>
+          <span>{{ t('database.manager.sidebarTitle') }}</span>
         </div>
         <NSpin :show="databasesLoading">
           <div v-if="databases.length === 0 && !databasesLoading" class="schema-sidebar__empty">
-            暂无数据库
+            {{ t('database.manager.noDatabases') }}
           </div>
           <div
             v-for="db in databases"
@@ -351,7 +353,7 @@ function onInstanceChange(val: number | null) {
       <!-- 右侧表列表 -->
       <div class="schema-main">
         <div v-if="!selectedDbName" class="empty-hint">
-          <NEmpty description="请选择左侧数据库" />
+          <NEmpty :description="t('database.manager.selectDbLeft')" />
         </div>
 
         <template v-else>
@@ -359,7 +361,7 @@ function onInstanceChange(val: number | null) {
             <span class="mono schema-main__dbname">{{ selectedDbName }}</span>
             <NSpace>
               <NButton size="small" @click="loadTables" :loading="tablesLoading">
-                <template #icon><NIcon><RefreshOutline /></NIcon></template>刷新
+                <template #icon><NIcon><RefreshOutline /></NIcon></template>{{ t('database.common.refresh') }}
               </NButton>
             </NSpace>
           </div>
@@ -372,14 +374,14 @@ function onInstanceChange(val: number | null) {
           />
 
           <div v-if="tables.length === 0 && !tablesLoading" class="empty-hint">
-            <NEmpty description="该数据库暂无表" />
+            <NEmpty :description="t('database.manager.noTables')" />
           </div>
 
           <!-- 展开的表结构 -->
           <div v-if="expandedTableName" class="expanded-section">
             <div class="expanded-section__header">
               <NIcon :size="14"><ConstructOutline /></NIcon>
-              <span class="mono">表结构: {{ expandedTableName }}</span>
+              <span class="mono">{{ t('database.manager.tableSchema', { name: expandedTableName }) }}</span>
               <NButton size="tiny" text @click="expandedTableName = ''">
                 <template #icon><NIcon><CloseOutline /></NIcon></template>
               </NButton>
@@ -397,7 +399,7 @@ function onInstanceChange(val: number | null) {
           <div v-if="tableDataVisible" class="expanded-section">
             <div class="expanded-section__header">
               <NIcon :size="14"><ServerOutline /></NIcon>
-              <span class="mono">表数据: {{ tableDataTableName }}</span>
+              <span class="mono">{{ t('database.manager.tableData', { name: tableDataTableName }) }}</span>
               <NButton size="tiny" text @click="tableDataVisible = false">
                 <template #icon><NIcon><CloseOutline /></NIcon></template>
               </NButton>
@@ -419,17 +421,17 @@ function onInstanceChange(val: number | null) {
     <!-- 创建数据库 -->
     <ModalForm
       v-model:show="createDbModal"
-      title="创建数据库"
+      :title="t('database.manager.createDbModalTitle')"
       :loading="createDbLoading"
       @submit="submitCreateDb"
     >
-      <NFormItem label="数据库名">
-        <NInput v-model:value="dbForm.name" placeholder="例如: myapp_db" />
+      <NFormItem :label="t('database.manager.form.dbName')">
+        <NInput v-model:value="dbForm.name" :placeholder="t('database.manager.form.dbNamePlaceholder')" />
       </NFormItem>
-      <NFormItem label="字符集">
+      <NFormItem :label="t('database.manager.form.charset')">
         <NSelect v-model:value="dbForm.charset" :options="charsetOptions" />
       </NFormItem>
-      <NFormItem label="排序规则">
+      <NFormItem :label="t('database.manager.form.collation')">
         <NSelect v-model:value="dbForm.collation" :options="collationOptions" />
       </NFormItem>
     </ModalForm>
@@ -437,10 +439,10 @@ function onInstanceChange(val: number | null) {
     <!-- 删除数据库确认 -->
     <ConfirmDialog
       v-model:show="deleteDbConfirm"
-      title="删除数据库"
-      :content="`确定要删除数据库「${targetDbName}」吗？此操作不可恢复。`"
+      :title="t('database.manager.deleteDbTitle')"
+      :content="t('database.manager.deleteDbContent', { name: targetDbName })"
       type="error"
-      confirm-text="删除"
+      :confirm-text="t('database.common.delete')"
       :loading="deleteDbLoading"
       @confirm="doDeleteDb"
     />
@@ -448,10 +450,10 @@ function onInstanceChange(val: number | null) {
     <!-- 删除表确认 -->
     <ConfirmDialog
       v-model:show="deleteTableConfirm"
-      title="删除表"
-      :content="`确定要删除表「${targetTableName}」吗？此操作不可恢复。`"
+      :title="t('database.manager.deleteTableTitle')"
+      :content="t('database.manager.deleteTableContent', { name: targetTableName })"
       type="error"
-      confirm-text="删除"
+      :confirm-text="t('database.common.delete')"
       :loading="deleteTableLoading"
       @confirm="doDeleteTable"
     />
@@ -517,7 +519,7 @@ function onInstanceChange(val: number | null) {
 }
 
 .schema-sidebar__empty {
-  color: var(--faint);
+  color: var(--text-quaternary);
   font-size: var(--fs-caption);
   text-align: center;
   padding: var(--space-4) 0;

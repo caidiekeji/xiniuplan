@@ -1,6 +1,9 @@
 package api
 
 import (
+	"fmt"
+	"strconv"
+
 	"cloudpivot/internal/common"
 	"cloudpivot/internal/dto"
 	"cloudpivot/internal/middleware"
@@ -36,10 +39,22 @@ func RegisterSystemRoutes(r *gin.RouterGroup) {
 	r.PUT("/system/smtp", middleware.RequirePermission(model.PermSettingUpdate), h.UpdateSmtpConfig)
 	r.POST("/system/smtp/test", middleware.RequirePermission(model.PermSettingUpdate), h.SendTestEmail)
 
+	// 安全评分（D-007，Dashboard 展示）
+	r.GET("/dashboard/security-score", middleware.RequirePermission(model.PermMonitorView), h.GetSecurityScore)
+
+	// 系统安全更新（SY-005）与 NTP（SY-006）
+	r.GET("/system/updates", middleware.RequirePermission(model.PermSettingView), h.CheckSystemUpdates)
+	r.POST("/system/updates/install", middleware.RequirePermission(model.PermSettingUpdate), h.InstallSystemUpdates)
+	r.GET("/system/ntp", middleware.RequirePermission(model.PermSettingView), h.GetNTPStatus)
+	r.PUT("/system/ntp", middleware.RequirePermission(model.PermSettingUpdate), h.SetNTPStatus)
+
 	// RBAC 用户/角色管理 + TOTP（通过已有路由组注册，无需修改 main.go）
 	RegisterUserRoutes(r)
 	RegisterRoleRoutes(r)
 	RegisterTOTPRoutes(r)
+
+	// API Key（U-007）+ 在线会话管理（U-006）
+	RegisterAPIKeyRoutes(r)
 
 	// DNS 云厂商管理
 	RegisterDNSRoutes(r)
@@ -69,7 +84,23 @@ func (h *SystemHandler) UpdateSettings(c *gin.Context) {
 		return
 	}
 
-	common.Success(c, gin.H{"updated": true})
+	// 面板端口真生效（方案 A）：panel_port 变更时写回 config.yaml，重启面板后监听新端口
+	portChanged, portMsg := false, ""
+	if pp, ok := req.Settings["panel_port"]; ok {
+		if newPort, err := strconv.Atoi(pp); err == nil && newPort > 0 {
+			current, changed, err := h.svc.UpdatePanelPort(newPort)
+			if err != nil {
+				common.Fail(c, common.CodeServerError, "端口修改失败: "+err.Error())
+				return
+			}
+			if changed {
+				portChanged = true
+				portMsg = fmt.Sprintf("面板端口将由 %d 改为 %d，重启面板（systemctl restart rhinopanel）后生效", current, newPort)
+			}
+		}
+	}
+
+	common.Success(c, gin.H{"updated": true, "port_changed": portChanged, "port_message": portMsg})
 }
 
 // GetVersion GET /system/version - 版本信息
@@ -159,4 +190,71 @@ func (h *SystemHandler) CheckUpdate(c *gin.Context) {
 		return
 	}
 	common.Success(c, version)
+}
+
+// CheckSystemUpdates GET /system/updates - 检查系统安全更新（SY-005）
+func (h *SystemHandler) CheckSystemUpdates(c *gin.Context) {
+	updates, pm, err := h.svc.CheckSystemUpdates()
+	if err != nil {
+		common.Fail(c, common.CodeServerError, "检查系统更新失败: "+err.Error())
+		return
+	}
+	common.Success(c, gin.H{
+		"package_manager": pm,
+		"items":           updates,
+		"total":           len(updates),
+	})
+}
+
+// InstallSystemUpdates POST /system/updates/install - 一键安装系统更新（SY-005，需 confirm）
+func (h *SystemHandler) InstallSystemUpdates(c *gin.Context) {
+	var req struct {
+		Confirm bool `json:"confirm"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		common.Fail(c, common.CodeParamError, "参数错误: "+err.Error())
+		return
+	}
+	output, err := h.svc.InstallSystemUpdates(req.Confirm)
+	if err != nil {
+		common.Fail(c, common.CodeServerError, err.Error())
+		return
+	}
+	common.Success(c, gin.H{"installed": true, "output": output})
+}
+
+// GetNTPStatus GET /system/ntp - NTP 状态（SY-006）
+func (h *SystemHandler) GetNTPStatus(c *gin.Context) {
+	status, err := h.svc.GetNTPStatus()
+	if err != nil {
+		common.Fail(c, common.CodeServerError, err.Error())
+		return
+	}
+	common.Success(c, status)
+}
+
+// SetNTPStatus PUT /system/ntp - 开关 NTP 同步（SY-006）
+func (h *SystemHandler) SetNTPStatus(c *gin.Context) {
+	var req struct {
+		Enabled bool `json:"enabled"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		common.Fail(c, common.CodeParamError, "参数错误: "+err.Error())
+		return
+	}
+	if err := h.svc.SetNTPEnabled(req.Enabled); err != nil {
+		common.Fail(c, common.CodeServerError, err.Error())
+		return
+	}
+	common.Success(c, gin.H{"enabled": req.Enabled})
+}
+
+// GetSecurityScore GET /dashboard/security-score - 安全评分（D-007）
+func (h *SystemHandler) GetSecurityScore(c *gin.Context) {
+	score, err := h.svc.GetSecurityScore()
+	if err != nil {
+		common.Fail(c, common.CodeServerError, "计算安全评分失败: "+err.Error())
+		return
+	}
+	common.Success(c, score)
 }

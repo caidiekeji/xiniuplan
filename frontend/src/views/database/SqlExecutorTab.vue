@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { useMessage } from 'naive-ui'
+import { useI18n } from 'vue-i18n'
+import { useMessage } from '@/composables/useMessage'
 import {
   NButton, NSpace, NIcon, NSelect, NInput, NFormItem, NEmpty,
   NCheckbox, NAlert, NTag, NUpload
@@ -12,6 +13,7 @@ import type { DatabaseInfo, SQLResult } from '@/api/database'
 import { rowsToObjects, buildDynamicColumns } from './shared'
 
 const message = useMessage()
+const { t } = useI18n()
 
 /* ==================== Props / Emits ==================== */
 
@@ -21,13 +23,9 @@ const props = defineProps<{
   databases: DatabaseInfo[]
 }>()
 
-const emit = defineEmits<{
-  (e: 'update:instanceId', val: number | null): void
-}>()
-
 /* ==================== SQL 执行器 ==================== */
 
-const sqlText = ref('-- 在此输入 SQL 语句\nSELECT 1;')
+const sqlText = ref(t('database.sql.defaultSql'))
 const sqlLoading = ref(false)
 const allowDestructive = ref(false)
 const sqlSelectedDb = ref('')
@@ -58,15 +56,15 @@ watch(
 
 async function executeSql() {
   if (!props.instanceId) {
-    message.warning('请先选择实例')
+    message.warning(t('database.sql.selectInstance'))
     return
   }
   if (!sqlSelectedDb.value) {
-    message.warning('请选择数据库')
+    message.warning(t('database.sql.selectDb'))
     return
   }
   if (!sqlText.value.trim()) {
-    message.warning('请输入 SQL 语句')
+    message.warning(t('database.sql.enterSql'))
     return
   }
   sqlLoading.value = true
@@ -88,10 +86,10 @@ async function executeSql() {
     if (res.data.error) {
       message.error(res.data.error)
     } else {
-      message.success('执行完成')
+      message.success(t('database.sql.executed'))
     }
   } catch (e: any) {
-    message.error(e.message || '执行失败')
+    message.error(e.message || t('database.sql.execFailed'))
   } finally {
     sqlLoading.value = false
   }
@@ -116,7 +114,7 @@ function handleImportFile(file: File) {
   const reader = new FileReader()
   reader.onload = (e) => {
     importContent.value = e.target?.result as string
-    message.success(`已加载文件: ${file.name}`)
+    message.success(t('database.sql.fileLoaded', { name: file.name }))
   }
   reader.readAsText(file)
   return false
@@ -125,11 +123,11 @@ function handleImportFile(file: File) {
 async function submitImport() {
   if (!props.instanceId) return
   if (!importDbName.value) {
-    message.warning('请选择数据库')
+    message.warning(t('database.sql.selectDb'))
     return
   }
   if (!importContent.value.trim()) {
-    message.warning('请粘贴 SQL 内容或上传文件')
+    message.warning(t('database.sql.enterContent'))
     return
   }
   importLoading.value = true
@@ -138,10 +136,10 @@ async function submitImport() {
       db_name: importDbName.value,
       content: importContent.value
     })
-    message.success(`导入完成，影响 ${res.data.affected_rows} 行，耗时 ${res.data.duration_ms}ms`)
+    message.success(t('database.sql.importDone', { rows: res.data.affected_rows, ms: res.data.duration_ms }))
     importModal.value = false
   } catch (e: any) {
-    message.error(e.message || '导入失败')
+    message.error(e.message || t('database.sql.importFailed'))
   } finally {
     importLoading.value = false
   }
@@ -154,14 +152,14 @@ async function submitImport() {
       <NSpace>
         <NSelect
           :value="instanceId"
-          placeholder="选择 MySQL 实例"
+          :placeholder="t('database.common.selectMysqlInstance')"
           :options="instanceOptions"
           style="width: var(--input-2xl)"
           @update:value="(v: number | null) => $emit('update:instanceId', v)"
         />
         <NSelect
           v-model:value="sqlSelectedDb"
-          placeholder="选择数据库"
+          :placeholder="t('database.sql.selectDbPlaceholder')"
           :options="dbOptionsForSql"
           style="width: var(--input-lg)"
           :disabled="!instanceId"
@@ -172,19 +170,19 @@ async function submitImport() {
           :disabled="!instanceId || !sqlSelectedDb"
           @click="executeSql"
         >
-          <template #icon><NIcon><PlayOutline /></NIcon></template>执行
+          <template #icon><NIcon><PlayOutline /></NIcon></template>{{ t('database.sql.execute') }}
         </NButton>
         <NButton :disabled="!instanceId" @click="openImport">
-          <template #icon><NIcon><CloudUploadOutline /></NIcon></template>导入
+          <template #icon><NIcon><CloudUploadOutline /></NIcon></template>{{ t('database.sql.import') }}
         </NButton>
         <NCheckbox v-model:checked="allowDestructive">
-          <span class="checkbox-label">允许危险操作</span>
+          <span class="checkbox-label">{{ t('database.sql.allowDestructive') }}</span>
         </NCheckbox>
       </NSpace>
     </div>
 
     <div v-if="!instanceId" class="empty-hint">
-      <NEmpty description="请先选择实例和数据库" />
+      <NEmpty :description="t('database.sql.selectInstanceFirst')" />
     </div>
 
     <template v-else>
@@ -197,12 +195,12 @@ async function submitImport() {
         <div class="sql-result__header">
           <NSpace>
             <NTag size="small" :type="sqlResult.error ? 'error' : 'success'" bordered>
-              {{ sqlResult.error ? '执行失败' : '执行成功' }}
+              {{ sqlResult.error ? t('database.sql.failed') : t('database.sql.success') }}
             </NTag>
             <span class="mono sql-result__meta">
-              耗时 <span class="num">{{ sqlResult.duration_ms }}</span> ms
+              {{ t('database.sql.duration', { ms: sqlResult.duration_ms }) }}
               <template v-if="sqlResult.affected_rows !== undefined">
-                · 影响 <span class="num">{{ sqlResult.affected_rows }}</span> 行
+                {{ t('database.sql.affected', { rows: sqlResult.affected_rows }) }}
               </template>
             </span>
           </NSpace>
@@ -222,7 +220,7 @@ async function submitImport() {
         </div>
 
         <div v-else-if="!sqlResult.error && !sqlResult.columns" class="sql-result__empty">
-          无返回结果集（非 SELECT 语句）
+          {{ t('database.sql.noResultSet') }}
         </div>
       </div>
     </template>
@@ -230,31 +228,31 @@ async function submitImport() {
     <!-- 导入 SQL -->
     <ModalForm
       v-model:show="importModal"
-      title="导入 SQL"
+      :title="t('database.sql.importModalTitle')"
       :loading="importLoading"
       :width="640"
       @submit="submitImport"
     >
-      <NFormItem label="目标数据库">
-        <NSelect v-model:value="importDbName" :options="dbOptionsForSql" placeholder="选择数据库" />
+      <NFormItem :label="t('database.sql.form.targetDb')">
+        <NSelect v-model:value="importDbName" :options="dbOptionsForSql" :placeholder="t('database.sql.selectDbPlaceholder')" />
       </NFormItem>
-      <NFormItem label="上传 SQL 文件">
+      <NFormItem :label="t('database.sql.form.uploadLabel')">
         <NUpload
           :custom-request="({ file }) => handleImportFile(file.file as File)"
           :show-file-list="false"
           accept=".sql"
         >
           <NButton>
-            <template #icon><NIcon><CloudUploadOutline /></NIcon></template>选择 .sql 文件
+            <template #icon><NIcon><CloudUploadOutline /></NIcon></template>{{ t('database.sql.form.chooseFile') }}
           </NButton>
         </NUpload>
       </NFormItem>
-      <NFormItem label="或粘贴 SQL 内容">
+      <NFormItem :label="t('database.sql.form.pasteLabel')">
         <NInput
           v-model:value="importContent"
           type="textarea"
           :rows="8"
-          placeholder="粘贴 SQL 语句..."
+          :placeholder="t('database.sql.form.pastePlaceholder')"
           style="font-family: var(--font-mono)"
         />
       </NFormItem>
@@ -300,7 +298,7 @@ async function submitImport() {
 
 .sql-result__meta {
   font-size: var(--fs-caption);
-  color: var(--faint);
+  color: var(--text-quaternary);
 }
 
 .sql-result__error {
@@ -314,7 +312,7 @@ async function submitImport() {
 .sql-result__empty {
   padding: var(--space-6);
   text-align: center;
-  color: var(--faint);
+  color: var(--text-quaternary);
   font-size: var(--fs-caption);
 }
 </style>

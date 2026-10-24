@@ -31,6 +31,19 @@ func RegisterAuditRoutes(r *gin.RouterGroup) {
 	r.GET("/audit/logs", middleware.RequirePermission(model.PermAuditView), h.ListLogs)
 	r.GET("/audit/login-logs", middleware.RequirePermission(model.PermAuditView), h.ListLoginLogs)
 	r.GET("/audit/export", middleware.RequirePermission(model.PermAuditView), h.Export)
+
+	// 异常登录检测（S-012）
+	r.GET("/audit/anomalies", middleware.RequirePermission(model.PermAuditView), h.ListAnomalies)
+}
+
+// ListAnomalies GET /audit/anomalies - 最近 24h 异常登录事件
+func (h *AuditHandler) ListAnomalies(c *gin.Context) {
+	events, err := auditsvc.DetectAnomalies(model.DB)
+	if err != nil {
+		common.Fail(c, common.CodeServerError, "异常检测失败: "+err.Error())
+		return
+	}
+	common.Success(c, gin.H{"items": events, "total": len(events)})
 }
 
 // ListLogs GET /audit/logs?user_id=&action=&result=&page=&pageSize= - 操作日志（分页）

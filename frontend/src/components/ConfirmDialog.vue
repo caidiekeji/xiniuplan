@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { NModal, NButton, NSpace, NIcon } from 'naive-ui'
+import { NModal } from 'naive-ui'
 
 const { t } = useI18n()
 
@@ -50,11 +50,6 @@ function handleCancel() {
   emit('cancel')
 }
 
-const typeColor: Record<string, string> = {
-  warning: 'var(--warn)',
-  error: 'var(--err)',
-  info: 'var(--info)'
-}
 </script>
 
 <template>

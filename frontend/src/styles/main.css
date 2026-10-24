@@ -16,6 +16,19 @@ body,
   width: 100%;
 }
 
+/* 视觉隐藏但保留读屏可达（布局级 h1 载体，审计 D22） */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 body {
   font-family: var(--font-sans);
   font-size: var(--fs-body);
@@ -109,6 +122,21 @@ a:hover {
   50% { opacity: 0.2; }
 }
 
+/* 键盘焦点可见（自定义可交互元素；Naive UI 组件自带 focus 样式） */
+:focus-visible {
+  outline: 2px solid var(--acc);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* 可点击卡片（StatCard 等）鼠标态之外也要有键盘态 */
+.stat-card:focus-visible,
+.score-check:focus-visible {
+  outline: 2px solid var(--acc);
+  outline-offset: 2px;
+  transform: translateY(var(--hover-lift));
+}
+
 /* 减少动效偏好 */
 @media (prefers-reduced-motion: reduce) {
   *,
@@ -136,11 +164,21 @@ a:hover {
   opacity: 0;
 }
 
+/* 表单字段下的辅助说明文字
+   此前 alert / appstore / website 各写一份 scoped 副本，样式一致但重复。
+   收敛为全局类，新增页面直接用 class="form-hint" 即可。 */
+.form-hint {
+  font-size: var(--fs-caption);
+  color: var(--text-quaternary);
+  margin-top: calc(var(--space-2) * -1);
+  margin-bottom: var(--space-4);
+}
+
 /* ========== 全局移动端优化 ========== */
 @media (max-width: 768px) {
   /* Naive UI 表单：输入框宽度自适应 */
   .n-form-item-label {
-    padding-right: 8px !important;
+    padding-right: var(--space-2) !important;
   }
 
   /* 弹窗宽度钳制：任何固定宽度的弹窗都不允许超过视口 */
@@ -153,7 +191,7 @@ a:hover {
   .filter-bar,
   .tab-toolbar {
     flex-wrap: wrap;
-    row-gap: 8px;
+    row-gap: var(--space-2);
   }
 
   .filter-bar .n-input,
@@ -164,12 +202,12 @@ a:hover {
   /* 表单标签改为顶部对齐，节省横向空间 */
   .n-form--label-left .n-form-item-label {
     justify-content: flex-start !important;
-    padding-bottom: 4px !important;
+    padding-bottom: var(--space-1) !important;
   }
 
   /* 弹窗内容区减小 padding */
   .n-modal .n-card {
-    margin: 12px !important;
+    margin: var(--space-3) !important;
   }
 
   /* 抽屉全屏 */
@@ -177,9 +215,15 @@ a:hover {
     max-width: 100vw !important;
   }
 
-  /* 表格操作列：按钮缩小 */
+  /* 表格操作列：按钮紧凑但保持可点高度（≥32px 触屏下限） */
   .n-data-table .n-button {
-    padding: 0 6px !important;
+    padding: 0 var(--space-2) !important;
+    min-height: 32px !important;
+  }
+
+  /* tiny 按钮触屏热区：22px → 32px（审计 D22 移动端热区） */
+  .n-button--tiny {
+    min-height: 32px;
   }
 
   /* Tab 标签可横向滚动 */
@@ -204,20 +248,20 @@ a:hover {
 
   /* 卡片内边距减小 */
   .n-card__content {
-    padding: 12px !important;
+    padding: var(--space-3) !important;
   }
 
   /* PageCard 头部换行 */
   .page-card__header {
     flex-wrap: wrap;
-    gap: 8px;
+    gap: var(--space-2);
   }
 
   /* StatCard 底部信息垂直排列 */
   .stat-card__footer {
     flex-direction: column;
     align-items: flex-start;
-    gap: 4px;
+    gap: var(--space-1);
   }
 
   /* 搜索表单项垂直排列 */
@@ -227,12 +271,7 @@ a:hover {
 }
 
 @media (max-width: 480px) {
-  /* 超小屏：表格字体缩小 */
-  .n-data-table-th,
-  .n-data-table-td {
-    padding: 6px 8px !important;
-    font-size: 12px !important;
-  }
+  /* 表格压缩样式已收敛至 DataTable.vue（审计 D25），此处不再重复定义 */
 
   /* 按钮文字隐藏，只留图标 */
   .n-button--small .n-button__content {
@@ -241,7 +280,7 @@ a:hover {
 
   /* 超小屏卡片内边距进一步减小 */
   .n-card__content {
-    padding: 10px !important;
+    padding: var(--space-3) !important;
   }
 
   /* 标题字体缩小 */

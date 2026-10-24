@@ -97,11 +97,12 @@ type TableIndex struct {
 
 // TableData 表数据分页
 type TableData struct {
-	Columns  []string        `json:"columns"`
-	Rows     [][]interface{} `json:"rows"`
-	Total    int64           `json:"total"`
-	Page     int             `json:"page"`
-	PageSize int             `json:"page_size"`
+	Columns []string        `json:"columns"`
+	Rows    [][]interface{} `json:"rows"`
+	Total   int64           `json:"total"`
+	Page    int             `json:"page"`
+	// 与 common.PageData 保持一致的 camelCase（此前用 page_size，与其他分页接口不一致）
+	PageSize int `json:"pageSize"`
 }
 
 // CreateDatabaseUserRequest 创建数据库用户请求
@@ -113,13 +114,15 @@ type CreateDatabaseUserRequest struct {
 
 // UserInfo 用户信息
 type UserInfo struct {
-	User string `json:"user"`
+	User string `json:"username"`
 	Host string `json:"host"`
 }
 
 // GrantRequest 授权请求
 type GrantRequest struct {
-	Username   string   `json:"username" binding:"required"`
+	// Username 来自 URL path（handler 会用 path 值覆盖），不应在 body 里重复必填，
+	// 否则前端不重复传 username 就会 400，授权按钮 100% 失败（2026-10-23 闭环审计）
+	Username   string   `json:"username"`
 	Host       string   `json:"host"`
 	DBName     string   `json:"db_name" binding:"required"`
 	Privileges []string `json:"privileges" binding:"required"`

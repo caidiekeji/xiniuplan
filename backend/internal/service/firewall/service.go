@@ -79,6 +79,57 @@ func registerCommandTemplates(e *common.CommandExecutor) {
 		Bin:  "firewall-cmd",
 		Args: []string{"--remove-port={{port}}/{{protocol}}", "--permanent"},
 	})
+	// --- 端口转发 NAT 规则（S-004，iptables -t nat） ---
+	// PREROUTING DNAT：外部访问本机端口 → 目标地址
+	e.Register(&common.CommandTemplate{
+		Name: "iptables_add_forward",
+		Bin:  "iptables",
+		Args: []string{"-t", "nat", "-A", "PREROUTING", "-p", "{{protocol}}", "--dport", "{{port}}", "-j", "DNAT", "--to-destination", "{{dest}}"},
+	})
+	e.Register(&common.CommandTemplate{
+		Name: "iptables_del_forward",
+		Bin:  "iptables",
+		Args: []string{"-t", "nat", "-D", "PREROUTING", "-p", "{{protocol}}", "--dport", "{{port}}", "-j", "DNAT", "--to-destination", "{{dest}}"},
+	})
+	// OUTPUT DNAT：本机自身访问的转发
+	e.Register(&common.CommandTemplate{
+		Name: "iptables_add_forward_local",
+		Bin:  "iptables",
+		Args: []string{"-t", "nat", "-A", "OUTPUT", "-p", "{{protocol}}", "--dport", "{{port}}", "-j", "DNAT", "--to-destination", "{{dest}}"},
+	})
+	e.Register(&common.CommandTemplate{
+		Name: "iptables_del_forward_local",
+		Bin:  "iptables",
+		Args: []string{"-t", "nat", "-D", "OUTPUT", "-p", "{{protocol}}", "--dport", "{{port}}", "-j", "DNAT", "--to-destination", "{{dest}}"},
+	})
+	// POSTROUTING SNAT/MASQUERADE：保证回包可达
+	e.Register(&common.CommandTemplate{
+		Name: "iptables_add_forward_masq",
+		Bin:  "iptables",
+		Args: []string{"-t", "nat", "-A", "POSTROUTING", "-p", "{{protocol}}", "-d", "{{dest_ip}}", "--dport", "{{dest_port}}", "-j", "MASQUERADE"},
+	})
+	e.Register(&common.CommandTemplate{
+		Name: "iptables_del_forward_masq",
+		Bin:  "iptables",
+		Args: []string{"-t", "nat", "-D", "POSTROUTING", "-p", "{{protocol}}", "-d", "{{dest_ip}}", "--dport", "{{dest_port}}", "-j", "MASQUERADE"},
+	})
+	// FORWARD 链放行转发流量
+	e.Register(&common.CommandTemplate{
+		Name: "iptables_add_forward_accept",
+		Bin:  "iptables",
+		Args: []string{"-A", "FORWARD", "-p", "{{protocol}}", "-d", "{{dest_ip}}", "--dport", "{{dest_port}}", "-j", "ACCEPT"},
+	})
+	e.Register(&common.CommandTemplate{
+		Name: "iptables_del_forward_accept",
+		Bin:  "iptables",
+		Args: []string{"-D", "FORWARD", "-p", "{{protocol}}", "-d", "{{dest_ip}}", "--dport", "{{dest_port}}", "-j", "ACCEPT"},
+	})
+	// 开启内核转发
+	e.Register(&common.CommandTemplate{
+		Name: "sysctl_ip_forward",
+		Bin:  "sysctl",
+		Args: []string{"-w", "net.ipv4.ip_forward=1"},
+	})
 }
 
 // ListRules 分页查询规则
@@ -111,12 +162,26 @@ func (s *Service) ListRules(page, pageSize int, ruleType string) ([]model.Firewa
 
 // AddRule 创建规则并执行系统命令
 func (s *Service) AddRule(req dto.CreateRuleRequest) (*model.FirewallRule, error) {
-	// 校验：port 类型必须有端口，ip 类型必须有 IP
+	// 校验：port 类型必须有端口，ip 类型必须有 IP，forward 类型必须有目标地址
 	if req.Type == "port" && req.Port <= 0 {
 		return nil, fmt.Errorf("端口类型规则必须指定端口号")
 	}
 	if req.Type == "ip" && req.IPAddress == "" {
 		return nil, fmt.Errorf("IP 类型规则必须指定 IP 地址")
+	}
+	if req.Type == "forward" {
+		if req.Port <= 0 {
+			return nil, fmt.Errorf("端口转发规则必须指定源端口号")
+		}
+		if req.DestIP == "" {
+			return nil, fmt.Errorf("端口转发规则必须指定目标地址")
+		}
+		if req.DestPort <= 0 {
+			req.DestPort = req.Port // 未指定目标端口则保持一致
+		}
+		if req.Protocol != "tcp" && req.Protocol != "udp" {
+			return nil, fmt.Errorf("端口转发仅支持 tcp/udp 协议")
+		}
 	}
 
 	rule := &model.FirewallRule{
@@ -125,6 +190,8 @@ func (s *Service) AddRule(req dto.CreateRuleRequest) (*model.FirewallRule, error
 		Protocol:  req.Protocol,
 		Port:      req.Port,
 		IPAddress: req.IPAddress,
+		DestIP:    req.DestIP,
+		DestPort:  req.DestPort,
 		Action:    req.Action,
 		Status:    "enabled",
 		Remark:    req.Remark,
@@ -239,9 +306,44 @@ func (s *Service) applyRule(ctx context.Context, rule *model.FirewallRule, add b
 				"target": target,
 			})
 		}
+	} else if rule.Type == "forward" {
+		err = s.applyForwardRule(ctx, rule, add)
 	}
 
 	return err
+}
+
+// applyForwardRule 应用端口转发 NAT 规则（DNAT + MASQUERADE + FORWARD 放行）
+func (s *Service) applyForwardRule(ctx context.Context, rule *model.FirewallRule, add bool) error {
+	dest := fmt.Sprintf("%s:%d", rule.DestIP, rule.DestPort)
+	params := map[string]string{
+		"protocol":  rule.Protocol,
+		"port":      strconv.Itoa(rule.Port),
+		"dest":      dest,
+		"dest_ip":   rule.DestIP,
+		"dest_port": strconv.Itoa(rule.DestPort),
+	}
+
+	verb := "add"
+	if !add {
+		verb = "del"
+	}
+
+	// 1. 确保内核转发已开启（添加时）
+	if add {
+		s.executor.Execute(ctx, "sysctl_ip_forward", nil)
+	}
+
+	// 2. DNAT 规则（PREROUTING 供外部访问；本机访问走 OUTPUT）
+	_, err := s.executor.Execute(ctx, "iptables_"+verb+"_forward", params)
+	if err != nil {
+		return err
+	}
+	s.executor.Execute(ctx, "iptables_"+verb+"_forward_local", params)
+	// 3. MASQUERADE + FORWARD 放行（删除时同步清理）
+	s.executor.Execute(ctx, "iptables_"+verb+"_forward_masq", params)
+	s.executor.Execute(ctx, "iptables_"+verb+"_forward_accept", params)
+	return nil
 }
 
 // GetSecuritySuggestions 检测高危端口是否对外开放，返回建议列表
@@ -305,6 +407,8 @@ func ToResponse(rule *model.FirewallRule) dto.RuleResponse {
 		Protocol:  rule.Protocol,
 		Port:      rule.Port,
 		IPAddress: rule.IPAddress,
+		DestIP:    rule.DestIP,
+		DestPort:  rule.DestPort,
 		Action:    rule.Action,
 		Status:    rule.Status,
 		Remark:    rule.Remark,

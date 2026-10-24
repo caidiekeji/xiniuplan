@@ -20,6 +20,10 @@ type UpdateSiteRequest struct {
 	RootDir       *string  `json:"root_dir"`
 	ProxyTarget   *string  `json:"proxy_target"`
 	Remark        *string  `json:"remark"`
+	// WAF 基础版（roadmap #10）
+	WafEnabled  *bool   `json:"waf_enabled"`
+	CCRpm       *int    `json:"cc_rpm"`
+	UABlacklist *string `json:"ua_blacklist"`
 }
 
 // SiteSSLInfo SSL 信息
@@ -47,6 +51,9 @@ type SiteResponse struct {
 	ContainerID   string      `json:"container_id"`
 	Remark        string      `json:"remark"`
 	SSL           SiteSSLInfo `json:"ssl"`
+	WafEnabled    bool        `json:"waf_enabled"`
+	CCRpm         int         `json:"cc_rpm"`
+	UABlacklist   string      `json:"ua_blacklist"`
 	CreatedAt     string      `json:"created_at"`
 	UpdatedAt     string      `json:"updated_at"`
 }

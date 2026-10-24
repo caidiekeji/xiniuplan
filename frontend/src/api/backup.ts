@@ -2,8 +2,10 @@ import { request, default as service } from './request'
 
 /* ==================== 类型定义 ==================== */
 
-export type BackupType = 'site' | 'database' | 'system'
-export type BackupStatus = 'completed' | 'running' | 'failed'
+export type BackupType = 'site' | 'database' | 'system' | 'app'
+// 状态集必须与后端 model.Backup 对齐：pending | running | success | failed
+// （此前写成 'completed'，与后端的 'success' 不匹配，导致恢复/下载/推送按钮恒禁用）
+export type BackupStatus = 'pending' | 'running' | 'success' | 'failed'
 
 export interface Backup {
   id: number

@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, h } from 'vue'
-import { NTabs, NTabPane, NButton, NIcon, NTag, NSwitch, NForm, NFormItem, NInput, NSelect, NText, NEmpty, useMessage } from 'naive-ui'
+import { NTabs, NTabPane, NButton, NIcon, NTag, NSwitch, NFormItem, NInput, NSelect, NText, NEmpty } from 'naive-ui'
+import { useMessage } from '@/composables/useMessage'
 import { ShieldHalfOutline, AddOutline, TrashOutline } from '@vicons/ionicons5'
 import { PageCard, DataTable, ModalForm, StatusTag, ConfirmDialog } from '@/components'
 import type { DataTableColumns } from 'naive-ui'
+import { useI18n } from 'vue-i18n'
 import {
   getFirewallRules,
   addFirewallRule,
@@ -19,6 +21,7 @@ import {
 } from '@/api/firewall'
 
 const message = useMessage()
+const { t } = useI18n()
 
 /* ==================== 端口规则 Tab ==================== */
 
@@ -32,11 +35,13 @@ const ruleTypeFilter = ref<RuleType | null>(null)
 const showAddModal = ref(false)
 const addLoading = ref(false)
 const addForm = ref({
-  type: 'port' as RuleType,
+  type: 'port' as RuleType | 'forward',
   direction: 'inbound' as RuleDirection,
   protocol: 'tcp' as RuleProtocol,
   port: '',
   ip: '',
+  dest_ip: '',
+  dest_port: '',
   action: 'accept' as RuleAction,
   remark: ''
 })
@@ -45,73 +50,75 @@ const deleteDialog = ref({ show: false, id: 0, port: '' })
 const deleteLoading = ref(false)
 const toggleLoading = ref<Set<number>>(new Set())
 
-const typeOptions = [
-  { label: '端口', value: 'port' },
+const typeOptions = computed(() => [
+  { label: t('firewall.typeForward'), value: 'forward' },
+  { label: t('firewall.typePort'), value: 'port' },
   { label: 'IP', value: 'ip' }
-]
-const directionOptions = [
-  { label: '入站', value: 'inbound' },
-  { label: '出站', value: 'outbound' }
-]
+])
+const directionOptions = computed(() => [
+  { label: t('firewall.directionInbound'), value: 'inbound' },
+  { label: t('firewall.directionOutbound'), value: 'outbound' }
+])
 const protocolOptions = [
   { label: 'TCP', value: 'tcp' },
   { label: 'UDP', value: 'udp' },
   { label: 'ICMP', value: 'icmp' },
   { label: 'ALL', value: 'all' }
 ]
-const actionOptions = [
-  { label: '允许', value: 'accept' },
-  { label: '拒绝', value: 'drop' }
-]
+const actionOptions = computed(() => [
+  { label: t('firewall.actionAccept'), value: 'accept' },
+  { label: t('firewall.actionDrop'), value: 'drop' }
+])
 
 const isPortType = computed(() => addForm.value.type === 'port')
+const isForwardType = computed(() => addForm.value.type === 'forward')
 
 const ruleColumns = computed<DataTableColumns>(() => [
   {
-    title: '类型',
+    title: t('firewall.colType'),
     key: 'type',
     width: 80,
     render: (row: any) =>
       h(NTag, { size: 'small', bordered: false, type: row.type === 'port' ? 'info' : 'default' }, () =>
-        row.type === 'port' ? '端口' : 'IP'
+        row.type === 'port' ? t('firewall.typePort') : 'IP'
       )
   },
   {
-    title: '方向',
+    title: t('firewall.colDirection'),
     key: 'direction',
     width: 80,
-    render: (row: any) => (row.direction === 'inbound' ? '入站' : '出站')
+    render: (row: any) => (row.direction === 'inbound' ? t('firewall.directionInbound') : t('firewall.directionOutbound'))
   },
   {
-    title: '协议',
+    title: t('firewall.colProtocol'),
     key: 'protocol',
     width: 80,
     render: (row: any) => h('span', { class: 'mono' }, row.protocol)
   },
   {
-    title: '端口',
+    title: t('firewall.colPort'),
     key: 'port',
     width: 100,
     render: (row: any) => h('span', { class: 'mono' }, row.port || '—')
   },
   {
-    title: 'IP 地址',
+    title: t('firewall.colIp'),
     key: 'ip',
     width: 140,
     render: (row: any) => h('span', { class: 'mono' }, row.ip_address || '—')
   },
   {
-    title: '动作',
+    title: t('firewall.colAction'),
     key: 'action',
     width: 90,
     render: (row: any) =>
       h(StatusTag, {
         status: row.action === 'accept' ? 'running' : 'error',
-        text: row.action === 'accept' ? '允许' : '拒绝'
+        text: row.action === 'accept' ? t('firewall.actionAccept') : t('firewall.actionDrop')
       })
   },
   {
-    title: '状态',
+    title: t('firewall.colStatus'),
     key: 'enabled',
     width: 90,
     render: (row: any) =>
@@ -123,13 +130,13 @@ const ruleColumns = computed<DataTableColumns>(() => [
       })
   },
   {
-    title: '备注',
+    title: t('firewall.colRemark'),
     key: 'remark',
     ellipsis: { tooltip: true },
     render: (row: any) => row.remark || '—'
   },
   {
-    title: '操作',
+    title: t('firewall.colActions'),
     key: 'actions',
     width: 100,
     render: (row: any) =>
@@ -156,34 +163,33 @@ async function loadRules() {
       rules.value = res.data.items
       rulesTotal.value = res.data.total
     } else {
-      generateMockRules()
+      rules.value = []
+      rulesTotal.value = 0
     }
-  } catch {
-    generateMockRules()
+  } catch (e: any) {
+    rules.value = []
+    rulesTotal.value = 0
+    message.error(e.message || t('firewall.loadRulesFailed'))
   } finally {
     rulesLoading.value = false
   }
 }
 
-function generateMockRules() {
-  rules.value = [
-    { id: 1, type: 'port', direction: 'inbound', protocol: 'tcp', port: 22, action: 'accept', status: 'enabled', remark: 'SSH 远程登录', created_at: '2026-09-01 10:00:00' },
-    { id: 2, type: 'port', direction: 'inbound', protocol: 'tcp', port: 80, action: 'accept', status: 'enabled', remark: 'HTTP', created_at: '2026-09-01 10:00:00' },
-    { id: 3, type: 'port', direction: 'inbound', protocol: 'tcp', port: 443, action: 'accept', status: 'enabled', remark: 'HTTPS', created_at: '2026-09-01 10:00:00' },
-    { id: 4, type: 'port', direction: 'inbound', protocol: 'tcp', port: 3306, action: 'drop', status: 'enabled', remark: '禁止外部访问 MySQL', created_at: '2026-09-02 14:30:00' },
-    { id: 5, type: 'ip', direction: 'inbound', protocol: 'all', ip_address: '192.168.1.100', action: 'accept', status: 'enabled', remark: '内网管理机', created_at: '2026-09-03 09:15:00' },
-    { id: 6, type: 'port', direction: 'inbound', protocol: 'tcp', port: 6379, action: 'drop', status: 'disabled', remark: 'Redis 外部访问（已禁用）', created_at: '2026-09-04 16:20:00' }
-  ]
-  rulesTotal.value = rules.value.length
-}
-
 async function handleAddRule() {
   if (isPortType.value && !addForm.value.port) {
-    message.warning('请输入端口号')
+    message.warning(t('firewall.enterPort'))
     return
   }
-  if (!isPortType.value && !addForm.value.ip) {
-    message.warning('请输入 IP 地址')
+  if (isForwardType.value && !addForm.value.port) {
+    message.warning(t('firewall.enterSourcePort'))
+    return
+  }
+  if (isForwardType.value && !addForm.value.dest_ip) {
+    message.warning(t('firewall.enterDestIp'))
+    return
+  }
+  if (!isPortType.value && !isForwardType.value && !addForm.value.ip) {
+    message.warning(t('firewall.enterIp'))
     return
   }
   addLoading.value = true
@@ -194,15 +200,17 @@ async function handleAddRule() {
       protocol: addForm.value.protocol,
       port: addForm.value.port ? parseInt(addForm.value.port) : undefined,
       ip_address: addForm.value.ip || undefined,
+      dest_ip: addForm.value.dest_ip || undefined,
+      dest_port: addForm.value.dest_port ? parseInt(addForm.value.dest_port) : undefined,
       action: addForm.value.action,
       remark: addForm.value.remark || undefined
-    })
-    message.success('规则添加成功')
+    } as any)
+    message.success(t('firewall.addSuccess'))
     showAddModal.value = false
     resetAddForm()
     loadRules()
   } catch (e: any) {
-    message.error(e.message || '添加失败')
+    message.error(e.message || t('firewall.addFailed'))
   } finally {
     addLoading.value = false
   }
@@ -215,6 +223,8 @@ function resetAddForm() {
     protocol: 'tcp',
     port: '',
     ip: '',
+    dest_ip: '',
+    dest_port: '',
     action: 'accept',
     remark: ''
   }
@@ -225,9 +235,9 @@ async function handleToggle(row: any) {
   try {
     await toggleFirewallRule(row.id)
     row.status = row.status === 'enabled' ? 'disabled' : 'enabled'
-    message.success(row.status === 'enabled' ? '规则已启用' : '规则已禁用')
+    message.success(row.status === 'enabled' ? t('firewall.ruleEnabled') : t('firewall.ruleDisabled'))
   } catch (e: any) {
-    message.error(e.message || '操作失败')
+    message.error(e.message || t('firewall.opFailed'))
   } finally {
     toggleLoading.value.delete(row.id)
   }
@@ -237,11 +247,11 @@ async function handleDelete() {
   deleteLoading.value = true
   try {
     await deleteFirewallRule(deleteDialog.value.id)
-    message.success('规则已删除')
+    message.success(t('firewall.ruleDeleted'))
     deleteDialog.value.show = false
     loadRules()
   } catch (e: any) {
-    message.error(e.message || '删除失败')
+    message.error(e.message || t('firewall.deleteFailed'))
   } finally {
     deleteLoading.value = false
   }
@@ -260,29 +270,20 @@ async function loadSuggestions() {
     if (res.data && Array.isArray(res.data)) {
       suggestions.value = res.data
     } else {
-      generateMockSuggestions()
+      suggestions.value = []
     }
   } catch {
-    generateMockSuggestions()
+    suggestions.value = []
+    message.error(t('firewall.loadSuggestionsFailed'))
   } finally {
     suggestionsLoading.value = false
   }
 }
 
-function generateMockSuggestions() {
-  suggestions.value = [
-    { id: 1, port: 23, service: 'Telnet', level: 'high', description: 'Telnet 协议以明文传输数据，存在严重的窃听和中间人攻击风险', suggestion: '关闭 23 端口，使用 SSH 替代' },
-    { id: 2, port: 3389, service: 'RDP', level: 'high', description: '远程桌面协议暴露在公网，易遭受暴力破解和蓝宝漏洞攻击', suggestion: '限制来源 IP 或使用 VPN 访问' },
-    { id: 3, port: 6379, service: 'Redis', level: 'medium', description: 'Redis 默认无认证，暴露后可能导致数据泄露和未授权访问', suggestion: '配置密码并绑定内网地址' },
-    { id: 4, port: 27017, service: 'MongoDB', level: 'medium', description: 'MongoDB 未启用认证，存在数据被勒索或删除的风险', suggestion: '启用认证并限制访问来源' },
-    { id: 5, port: 21, service: 'FTP', level: 'low', description: 'FTP 明文传输密码，建议使用更安全的 SFTP', suggestion: '迁移至 SFTP 或 FTPS' }
-  ]
-}
-
 function levelTag(level: string) {
-  if (level === 'high') return { status: 'error' as const, text: '高危' }
-  if (level === 'medium') return { status: 'warning' as const, text: '中危' }
-  return { status: 'running' as const, text: '低危' }
+  if (level === 'high') return { status: 'error' as const, text: t('firewall.levelHigh') }
+  if (level === 'medium') return { status: 'warning' as const, text: t('firewall.levelMedium') }
+  return { status: 'running' as const, text: t('firewall.levelLow') }
 }
 
 async function handleOneClickClose(s: SecuritySuggestion) {
@@ -294,12 +295,12 @@ async function handleOneClickClose(s: SecuritySuggestion) {
       protocol: 'all',
       port: s.port,
       action: 'drop',
-      remark: `安全建议自动关闭: ${s.service}`
+      remark: t('firewall.autoCloseRemark', { service: s.service })
     })
-    message.success(`已添加拒绝规则，端口 ${s.port} 已关闭`)
+    message.success(t('firewall.portClosed', { port: s.port }))
     loadRules()
   } catch (e: any) {
-    message.error(e.message || '操作失败')
+    message.error(e.message || t('firewall.opFailed'))
   } finally {
     closingPorts.value.delete(s.port)
   }
@@ -317,21 +318,21 @@ onMounted(() => {
   <div class="firewall-page">
     <NTabs type="line" animated>
       <!-- Tab 1: 端口规则 -->
-      <NTabPane name="rules" tab="端口规则">
-        <PageCard title="防火墙规则" subtitle="管理端口与 IP 访问控制策略">
+      <NTabPane name="rules" :tab="t('firewall.tabRules')">
+        <PageCard :title="t('firewall.rulesTitle')" :subtitle="t('firewall.rulesSubtitle')">
           <template #extra>
             <NButton type="primary" size="small" @click="showAddModal = true">
               <template #icon>
                 <NIcon><AddOutline /></NIcon>
               </template>
-              添加规则
+              {{ t('firewall.addRule') }}
             </NButton>
           </template>
 
           <div class="firewall__filter">
             <NSelect
               v-model:value="ruleTypeFilter"
-              placeholder="全部类型"
+              :placeholder="t('firewall.allTypes')"
               clearable
               size="small"
               style="width: 140px"
@@ -357,13 +358,13 @@ onMounted(() => {
       </NTabPane>
 
       <!-- Tab 2: 安全建议 -->
-      <NTabPane name="suggestions" tab="安全建议">
-        <PageCard title="安全建议" subtitle="高危端口检测与安全加固推荐">
+      <NTabPane name="suggestions" :tab="t('firewall.tabSuggestions')">
+        <PageCard :title="t('firewall.suggestionsTitle')" :subtitle="t('firewall.suggestionsSubtitle')">
           <div v-if="suggestionsLoading" class="firewall__loading">
-            <NText>加载中...</NText>
+            <NText>{{ t('firewall.loading') }}</NText>
           </div>
           <div v-else-if="suggestions.length === 0" class="firewall__empty">
-            <NEmpty description="暂无安全建议，系统处于安全状态" />
+            <NEmpty :description="t('firewall.emptySuggestions')" />
           </div>
           <div v-else class="suggestion-list">
             <div v-for="s in suggestions" :key="s.id" class="suggestion-card">
@@ -387,7 +388,7 @@ onMounted(() => {
                   :loading="closingPorts.has(s.port)"
                   @click="handleOneClickClose(s)"
                 >
-                  一键关闭
+                  {{ t('firewall.oneClickClose') }}
                 </NButton>
               </div>
             </div>
@@ -399,40 +400,46 @@ onMounted(() => {
     <!-- 添加规则 Modal -->
     <ModalForm
       :show="showAddModal"
-      title="添加防火墙规则"
+      :title="t('firewall.addRuleTitle')"
       :loading="addLoading"
       @update:show="(v: boolean) => (showAddModal = v)"
       @submit="handleAddRule"
     >
-      <NFormItem label="规则类型" required>
+      <NFormItem :label="t('firewall.formType')" required>
         <NSelect v-model:value="addForm.type" :options="typeOptions" />
       </NFormItem>
-      <NFormItem label="方向" required>
+      <NFormItem :label="t('firewall.colDirection')" required>
         <NSelect v-model:value="addForm.direction" :options="directionOptions" />
       </NFormItem>
-      <NFormItem label="协议" required>
+      <NFormItem :label="t('firewall.colProtocol')" required>
         <NSelect v-model:value="addForm.protocol" :options="protocolOptions" />
       </NFormItem>
-      <NFormItem v-if="isPortType" label="端口" required>
-        <NInput v-model:value="addForm.port" placeholder="例如: 80 或 8000-9000" />
+      <NFormItem v-if="isPortType || isForwardType" :label="t('firewall.colPort')" required>
+        <NInput v-model:value="addForm.port" :placeholder="t('firewall.portPlaceholder')" />
       </NFormItem>
-      <NFormItem v-else label="IP 地址" required>
-        <NInput v-model:value="addForm.ip" placeholder="例如: 192.168.1.100 或 10.0.0.0/24" />
+      <NFormItem v-else-if="isForwardType" :label="t('firewall.formDestIp')" required>
+        <NInput v-model:value="addForm.dest_ip" :placeholder="t('firewall.destIpPlaceholder')" />
       </NFormItem>
-      <NFormItem label="动作" required>
+      <NFormItem v-if="isForwardType" :label="t('firewall.formDestPort')">
+        <NInput v-model:value="addForm.dest_port" :placeholder="t('firewall.destPortPlaceholder')" />
+      </NFormItem>
+      <NFormItem v-else :label="t('firewall.colIp')" required>
+        <NInput v-model:value="addForm.ip" :placeholder="t('firewall.ipPlaceholder')" />
+      </NFormItem>
+      <NFormItem :label="t('firewall.colAction')" required>
         <NSelect v-model:value="addForm.action" :options="actionOptions" />
       </NFormItem>
-      <NFormItem label="备注">
-        <NInput v-model:value="addForm.remark" placeholder="规则说明（可选）" />
+      <NFormItem :label="t('firewall.colRemark')">
+        <NInput v-model:value="addForm.remark" :placeholder="t('firewall.remarkPlaceholder')" />
       </NFormItem>
     </ModalForm>
 
     <!-- 删除确认 -->
     <ConfirmDialog
       :show="deleteDialog.show"
-      title="删除规则"
-      :content="`确定要删除规则（${deleteDialog.port}）吗？此操作不可撤销。`"
-      confirm-text="删除"
+      :title="t('firewall.deleteTitle')"
+      :content="t('firewall.deleteContent', { port: deleteDialog.port })"
+      :confirm-text="t('firewall.deleteConfirm')"
       type="error"
       :loading="deleteLoading"
       @update:show="(v: boolean) => (deleteDialog.show = v)"
@@ -445,7 +452,7 @@ onMounted(() => {
 .firewall-page {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--space-6);
 }
 
 .firewall__filter {
@@ -456,7 +463,7 @@ onMounted(() => {
 .firewall__empty {
   padding: var(--space-8) 0;
   text-align: center;
-  color: var(--faint);
+  color: var(--text-quaternary);
 }
 
 .suggestion-list {

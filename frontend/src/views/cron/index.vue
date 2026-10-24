@@ -1,9 +1,7 @@
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, h, watch } from 'vue'
-import {
-  NButton, NIcon, NForm, NFormItem, NInput, NSelect, NRadioGroup,
-  NRadio, NSpace, NTag, NDrawer, NDrawerContent, NThing, useMessage
-} from 'naive-ui'
+import { ref, reactive, computed, onMounted, h } from 'vue'
+import { NButton, NIcon, NForm, NFormItem, NInput, NSelect, NRadioGroup, NRadio, NSpace, NTag, NDrawer, NDrawerContent } from 'naive-ui'
+import { useMessage } from '@/composables/useMessage'
 import {
   AddOutline, PlayOutline, StopOutline, RefreshOutline,
   DocumentTextOutline, TrashOutline, CreateOutline, TimerOutline
@@ -19,37 +17,40 @@ import {
   type CreateCronTaskData, type CronLog
 } from '@/api/cron'
 import type { DataTableColumns } from 'naive-ui'
+import { useI18n } from 'vue-i18n'
 
 const message = useMessage()
+const { t } = useI18n()
 
 /* ========== 常量映射 ========== */
-const typeLabelMap: Record<CronTaskType, string> = {
-  shell: 'Shell',
-  backup: '备份',
-  url: 'URL',
-  app_restart: '应用重启'
-}
-
-const typeTagTypeMap: Record<CronTaskType, 'info' | 'success' | 'warning' | 'default'> = {
+const typeTagTypeMap: Record<CronTaskType, 'info' | 'success' | 'warning' | 'default' | 'error'> = {
   shell: 'info',
   backup: 'success',
   url: 'warning',
-  app_restart: 'default'
+  app_restart: 'default',
+  ssl_check: 'warning',
+  docker_cleanup: 'info',
+  recycle_cleanup: 'default',
+  tamper_check: 'error',
+  virus_scan: 'error'
 }
 
-const statusMap: Record<CronTaskStatus, { status: StatusType; text: string }> = {
-  enabled: { status: 'running', text: '已启用' },
-  disabled: { status: 'stopped', text: '已禁用' }
+/* 内置任务类型：无需 command/target 参数 */
+const builtinTypes: CronTaskType[] = ['ssl_check', 'docker_cleanup', 'recycle_cleanup', 'tamper_check']
+
+const statusMap: Record<CronTaskStatus, StatusType> = {
+  enabled: 'running',
+  disabled: 'stopped'
 }
 
 /* ========== Cron 预设 ========== */
-const cronPresets = [
-  { label: '每分钟', value: '* * * * *' },
-  { label: '每小时', value: '0 * * * *' },
-  { label: '每天', value: '0 3 * * *' },
-  { label: '每周', value: '0 3 * * 0' },
-  { label: '每月', value: '0 3 1 * *' }
-]
+const cronPresets = computed(() => [
+  { label: t('cron.presets.minute'), value: '* * * * *' },
+  { label: t('cron.presets.hourly'), value: '0 * * * *' },
+  { label: t('cron.presets.daily'), value: '0 3 * * *' },
+  { label: t('cron.presets.weekly'), value: '0 3 * * 0' },
+  { label: t('cron.presets.monthly'), value: '0 3 1 * *' }
+])
 
 /* ========== Cron 人类可读描述 ========== */
 function describeCron(expr: string): string {
@@ -57,18 +58,19 @@ function describeCron(expr: string): string {
   if (parts.length !== 5) return expr
   const [minute, hour, day, month, week] = parts
 
-  if (minute === '*' && hour === '*' && day === '*' && month === '*' && week === '*') return '每分钟'
-  if (minute === '0' && hour === '*' && day === '*' && month === '*' && week === '*') return '每小时整点'
-  if (hour === '*' && day === '*' && month === '*' && week === '*') return `每小时第 ${minute} 分`
+  if (minute === '*' && hour === '*' && day === '*' && month === '*' && week === '*') return t('cron.desc.everyMinute')
+  if (minute === '0' && hour === '*' && day === '*' && month === '*' && week === '*') return t('cron.desc.everyHour')
+  if (hour === '*' && day === '*' && month === '*' && week === '*') return t('cron.desc.hourlyAt', { minute })
   if (day === '*' && month === '*' && week === '*') {
-    return `每天 ${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`
+    return t('cron.desc.dailyAt', { time: `${hour.padStart(2, '0')}:${minute.padStart(2, '0')}` })
   }
   if (month === '*' && week === '*' && day !== '*') {
-    return `每月 ${day} 日 ${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`
+    return t('cron.desc.monthlyAt', { day, time: `${hour.padStart(2, '0')}:${minute.padStart(2, '0')}` })
   }
   if (day === '*' && month === '*' && week !== '*') {
-    const weekMap: Record<string, string> = { '0': '日', '1': '一', '2': '二', '3': '三', '4': '四', '5': '五', '6': '六', '7': '日' }
-    return `每周${weekMap[week] || week} ${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`
+    const weekKeyMap: Record<string, string> = { '0': 'sun', '1': 'mon', '2': 'tue', '3': 'wed', '4': 'thu', '5': 'fri', '6': 'sat', '7': 'sun' }
+    const weekDay = t(`cron.weekNames.${weekKeyMap[week] || 'sun'}`)
+    return t('cron.desc.weeklyAt', { day: weekDay, time: `${hour.padStart(2, '0')}:${minute.padStart(2, '0')}` })
   }
   return expr
 }
@@ -81,17 +83,6 @@ const page = ref(1)
 const pageSize = ref(20)
 
 /* ========== Mock 数据兜底 ========== */
-function generateMockTasks(): { items: CronTask[]; total: number } {
-  const mock: CronTask[] = [
-    { id: 1, name: '每日网站备份', type: 'backup', schedule: '0 3 * * *', target: 'website', status: 'enabled', lastRunAt: '2026-09-08 03:00:00', nextRunAt: '2026-09-09 03:00:00', remark: '每天凌晨3点备份所有站点', createdAt: '2026-08-01 10:00:00' },
-    { id: 2, name: '数据库清理', type: 'shell', schedule: '0 4 * * 0', command: 'mysql -e "DELETE FROM logs WHERE created_at < DATE_SUB(NOW(), INTERVAL 30 DAY)"', status: 'enabled', lastRunAt: '2026-09-07 04:00:00', nextRunAt: '2026-09-14 04:00:00', remark: '每周日清理30天前日志', createdAt: '2026-08-05 14:00:00' },
-    { id: 3, name: '健康检查', type: 'url', schedule: '*/5 * * * *', target: 'https://example.com/health', status: 'enabled', lastRunAt: '2026-09-08 14:30:00', nextRunAt: '2026-09-08 14:35:00', remark: '每5分钟检查站点健康', createdAt: '2026-08-10 09:00:00' },
-    { id: 4, name: '应用重启', type: 'app_restart', schedule: '0 5 * * *', target: 'nginx', status: 'disabled', lastRunAt: '2026-09-01 05:00:00', nextRunAt: '—', remark: '每日凌晨5点重启Nginx', createdAt: '2026-08-15 11:00:00' },
-    { id: 5, name: 'SSL证书续期', type: 'shell', schedule: '0 2 1 * *', command: 'certbot renew --quiet', status: 'enabled', lastRunAt: '2026-09-01 02:00:00', nextRunAt: '2026-10-01 02:00:00', remark: '每月1日续期证书', createdAt: '2026-07-20 16:00:00' }
-  ]
-  return { items: mock, total: mock.length }
-}
-
 async function loadTasks() {
   loading.value = true
   try {
@@ -100,14 +91,13 @@ async function loadTasks() {
       tasks.value = res.data.items
       total.value = res.data.total
     } else {
-      const mock = generateMockTasks()
-      tasks.value = mock.items
-      total.value = mock.total
+      tasks.value = []
+      total.value = 0
     }
-  } catch {
-    const mock = generateMockTasks()
-    tasks.value = mock.items
-    total.value = mock.total
+  } catch (e: any) {
+    tasks.value = []
+    total.value = 0
+    message.error(e.message || t('cron.loadFailed'))
   } finally {
     loading.value = false
   }
@@ -126,7 +116,7 @@ const pagination = computed(() => ({
 /* ========== 表格列 ========== */
 const columns = computed<DataTableColumns>(() => [
   {
-    title: '任务名称',
+    title: t('cron.nameCol'),
     key: 'name',
     width: 180,
     render: (row: any) => h('div', { class: 'cron-name' }, [
@@ -137,7 +127,7 @@ const columns = computed<DataTableColumns>(() => [
     ])
   },
   {
-    title: '类型',
+    title: t('cron.typeCol'),
     key: 'type',
     width: 100,
     render: (row: any) => h(NTag, {
@@ -145,10 +135,10 @@ const columns = computed<DataTableColumns>(() => [
       type: typeTagTypeMap[row.type as CronTaskType],
       bordered: false,
       round: true
-    }, { default: () => typeLabelMap[row.type as CronTaskType] })
+    }, { default: () => t('cron.types.' + row.type) })
   },
   {
-    title: 'Cron 表达式',
+    title: t('cron.cronCol'),
     key: 'cron',
     width: 240,
     render: (row: any) => h('div', { class: 'cron-expr' }, [
@@ -157,28 +147,28 @@ const columns = computed<DataTableColumns>(() => [
     ])
   },
   {
-    title: '状态',
+    title: t('cron.statusCol'),
     key: 'status',
     width: 100,
     render: (row: any) => {
-      const cfg = statusMap[row.status as CronTaskStatus]
-      return h(StatusTag, { status: cfg.status, text: cfg.text })
+      const status = statusMap[row.status as CronTaskStatus]
+      return h(StatusTag, { status, text: t('cron.statuses.' + row.status) })
     }
   },
   {
-    title: '上次执行',
+    title: t('cron.lastRunCol'),
     key: 'lastRunAt',
     width: 160,
     render: (row: any) => h('span', { class: 'mono', style: 'color:var(--sub);font-size:var(--fs-caption)' }, row.lastRunAt || '—')
   },
   {
-    title: '下次执行',
+    title: t('cron.nextRunCol'),
     key: 'nextRunAt',
     width: 160,
     render: (row: any) => h('span', { class: 'mono', style: 'color:var(--sub);font-size:var(--fs-caption)' }, row.nextRunAt || '—')
   },
   {
-    title: '操作',
+    title: t('cron.actionsCol'),
     key: 'actions',
     width: 320,
     render: (row: any) => {
@@ -194,7 +184,7 @@ const columns = computed<DataTableColumns>(() => [
             onClick: () => isEnabled ? handleDisable(row.id) : handleEnable(row.id)
           }, {
             icon: () => h(NIcon, null, { default: () => h(isEnabled ? StopOutline : PlayOutline) }),
-            default: () => isEnabled ? '禁用' : '启用'
+            default: () => isEnabled ? t('cron.disable') : t('cron.enable')
           }),
           h(NButton, {
             size: 'tiny',
@@ -203,7 +193,7 @@ const columns = computed<DataTableColumns>(() => [
             onClick: () => handleTrigger(row.id)
           }, {
             icon: () => h(NIcon, null, { default: () => h(RefreshOutline) }),
-            default: () => '触发'
+            default: () => t('cron.trigger')
           }),
           h(NButton, {
             size: 'tiny',
@@ -211,7 +201,7 @@ const columns = computed<DataTableColumns>(() => [
             onClick: () => openLogs(row.id)
           }, {
             icon: () => h(NIcon, null, { default: () => h(DocumentTextOutline) }),
-            default: () => '日志'
+            default: () => t('cron.logs')
           }),
           h(NButton, {
             size: 'tiny',
@@ -219,7 +209,7 @@ const columns = computed<DataTableColumns>(() => [
             onClick: () => openEdit(row.id)
           }, {
             icon: () => h(NIcon, null, { default: () => h(CreateOutline) }),
-            default: () => '编辑'
+            default: () => t('cron.edit')
           }),
           h(NButton, {
             size: 'tiny',
@@ -229,7 +219,7 @@ const columns = computed<DataTableColumns>(() => [
             onClick: () => openDelete(row.id)
           }, {
             icon: () => h(NIcon, null, { default: () => h(TrashOutline) }),
-            default: () => '删除'
+            default: () => t('cron.delete')
           })
         ]
       })
@@ -244,10 +234,10 @@ async function handleEnable(id: number) {
   actionLoadingId.value = id
   try {
     await enableCronTask(id)
-    message.success('任务已启用')
+    message.success(t('cron.enabledMsg'))
     loadTasks()
   } catch (err: any) {
-    message.error(err.message || '启用失败')
+    message.error(err.message || t('cron.enableFailed'))
   } finally {
     actionLoadingId.value = null
   }
@@ -257,10 +247,10 @@ async function handleDisable(id: number) {
   actionLoadingId.value = id
   try {
     await disableCronTask(id)
-    message.success('任务已禁用')
+    message.success(t('cron.disabledMsg'))
     loadTasks()
   } catch (err: any) {
-    message.error(err.message || '禁用失败')
+    message.error(err.message || t('cron.disableFailed'))
   } finally {
     actionLoadingId.value = null
   }
@@ -270,9 +260,9 @@ async function handleTrigger(id: number) {
   actionLoadingId.value = id
   try {
     await triggerCronTask(id)
-    message.success('任务已触发')
+    message.success(t('cron.triggeredMsg'))
   } catch (err: any) {
-    message.error(err.message || '触发失败')
+    message.error(err.message || t('cron.triggerFailed'))
   } finally {
     actionLoadingId.value = null
   }
@@ -307,29 +297,29 @@ const cronExpression = computed(() => {
 
 const cronDescription = computed(() => describeCron(cronExpression.value))
 
-const formRules = {
+const formRules = computed(() => ({
   name: {
     required: true,
-    message: '请输入任务名称',
+    message: t('cron.nameRequired'),
     trigger: 'blur'
   },
   command: {
     required: true,
-    message: '请输入 Shell 命令',
+    message: t('cron.commandRequired'),
     trigger: 'blur'
   },
   target: {
     required: true,
-    message: '请输入目标',
+    message: t('cron.targetRequired'),
     trigger: 'blur'
   }
-}
+}))
 
-const backupTypeOptions = [
-  { label: '网站备份', value: 'website' },
-  { label: '数据库备份', value: 'database' },
-  { label: '系统备份', value: 'system' }
-]
+const backupTypeOptions = computed(() => [
+  { label: t('cron.backupTypes.website'), value: 'website' },
+  { label: t('cron.backupTypes.database'), value: 'database' },
+  { label: t('cron.backupTypes.system'), value: 'system' }
+])
 
 function resetForm() {
   form.name = ''
@@ -354,7 +344,7 @@ function openCreate() {
 }
 
 function openEdit(id: number) {
-  const task = tasks.value.find((t) => t.id === id)
+  const task = tasks.value.find((tk) => tk.id === id)
   if (!task) return
   isEdit.value = true
   editId.value = id
@@ -367,7 +357,7 @@ function openEdit(id: number) {
   // 解析 cron
   const parts = task.schedule.trim().split(/\s+/)
   if (parts.length === 5) {
-    const matched = cronPresets.find((p) => p.value === task.schedule)
+    const matched = cronPresets.value.find((p) => p.value === task.schedule)
     if (matched) {
       form.cronMode = 'preset'
       form.cronPreset = task.schedule
@@ -399,43 +389,52 @@ async function handleFormSubmit() {
 
   if (form.type === 'shell') {
     if (!form.command.trim()) {
-      message.warning('请输入 Shell 命令')
+      message.warning(t('cron.commandRequired'))
       return
     }
     data.command = form.command
   } else if (form.type === 'backup') {
     if (!form.target) {
-      message.warning('请选择备份类型')
+      message.warning(t('cron.selectBackupType'))
       return
     }
     data.target = form.target
   } else if (form.type === 'url') {
     if (!form.target.trim()) {
-      message.warning('请输入 URL')
+      message.warning(t('cron.urlRequired'))
       return
     }
     data.target = form.target
   } else if (form.type === 'app_restart') {
     if (!form.target.trim()) {
-      message.warning('请输入容器名')
+      message.warning(t('cron.containerRequired'))
       return
     }
     data.target = form.target
+  } else if (form.type === 'virus_scan') {
+    if (!form.target.trim()) {
+      message.warning(t('cron.scanDirRequired'))
+      return
+    }
+    data.target = form.target
+  } else if (!builtinTypes.includes(form.type)) {
+    message.warning(t('cron.unknownType'))
+    return
   }
 
   formLoading.value = true
   try {
     if (isEdit.value && editId.value !== null) {
       await updateCronTask(editId.value, data)
-      message.success('任务已更新')
+      message.success(t('cron.updatedMsg'))
     } else {
       await createCronTask(data)
-      message.success('任务已创建')
+      message.success(t('cron.createdMsg'))
     }
     showForm.value = false
     loadTasks()
   } catch (err: any) {
-    message.error(err.message || '保存失败')
+    message.error(err.message || t('cron.saveFailed'))
   } finally {
     formLoading.value = false
   }
@@ -452,10 +451,10 @@ const logsPage = ref(1)
 const logsPageSize = ref(10)
 const expandedLogId = ref<number | null>(null)
 
-const logResultMap: Record<string, { status: StatusType; text: string }> = {
-  success: { status: 'running', text: '成功' },
-  failed: { status: 'error', text: '失败' },
-  running: { status: 'warning', text: '执行中' }
+const logStatusMap: Record<string, StatusType> = {
+  success: 'running',
+  failed: 'error',
+  running: 'warning'
 }
 
 function formatDuration(ms?: number): string {
@@ -466,7 +465,7 @@ function formatDuration(ms?: number): string {
 
 async function openLogs(id: number) {
   logsTaskId.value = id
-  const task = tasks.value.find((t) => t.id === id)
+  const task = tasks.value.find((tk) => tk.id === id)
   logsTaskName.value = task?.name || ''
   logsPage.value = 1
   expandedLogId.value = null
@@ -511,34 +510,34 @@ const logsPagination = computed(() => ({
 
 const logColumns = computed<DataTableColumns>(() => [
   {
-    title: '开始时间',
+    title: t('cron.startTimeCol'),
     key: 'startTime',
     width: 160,
     render: (row: any) => h('span', { class: 'mono', style: 'color:var(--sub);font-size:var(--fs-caption)' }, row.startTime)
   },
   {
-    title: '结束时间',
+    title: t('cron.endTimeCol'),
     key: 'endTime',
     width: 160,
     render: (row: any) => h('span', { class: 'mono', style: 'color:var(--sub);font-size:var(--fs-caption)' }, row.endTime || '—')
   },
   {
-    title: '耗时',
+    title: t('cron.durationCol'),
     key: 'durationMs',
     width: 100,
     render: (row: any) => h('span', { class: 'mono', style: 'color:var(--sub)' }, formatDuration(row.durationMs))
   },
   {
-    title: '结果',
+    title: t('cron.resultCol'),
     key: 'result',
     width: 90,
     render: (row: any) => {
-      const cfg = logResultMap[row.result] || logResultMap.failed
-      return h(StatusTag, { status: cfg.status, text: cfg.text })
+      const key = logStatusMap[row.result] ? row.result : 'failed'
+      return h(StatusTag, { status: logStatusMap[key], text: t('cron.results.' + key) })
     }
   },
   {
-    title: '输出',
+    title: t('cron.outputCol'),
     key: 'output',
     render: (row: any) => {
       const isExpanded = expandedLogId.value === row.id
@@ -549,7 +548,7 @@ const logColumns = computed<DataTableColumns>(() => [
           quaternary: true,
           onClick: () => { expandedLogId.value = isExpanded ? null : row.id }
         }, {
-          default: () => isExpanded ? '收起' : '展开'
+          default: () => isExpanded ? t('cron.collapse') : t('cron.expand')
         }),
         isExpanded
           ? h('div', { class: 'log-output__detail' }, [
@@ -575,7 +574,7 @@ const deleteName = ref('')
 
 function openDelete(id: number) {
   deleteId.value = id
-  const task = tasks.value.find((t) => t.id === id)
+  const task = tasks.value.find((tk) => tk.id === id)
   deleteName.value = task?.name || ''
   showDelete.value = true
 }
@@ -585,11 +584,11 @@ async function handleDeleteConfirm() {
   deleteLoading.value = true
   try {
     await deleteCronTask(deleteId.value)
-    message.success('任务已删除')
+    message.success(t('cron.deletedMsg'))
     showDelete.value = false
     loadTasks()
   } catch (err: any) {
-    message.error(err.message || '删除失败')
+    message.error(err.message || t('cron.deleteFailed'))
   } finally {
     deleteLoading.value = false
   }
@@ -601,13 +600,13 @@ onMounted(() => {
 </script>
 
 <template>
-  <PageCard title="计划任务" subtitle="定时执行 Shell 脚本 / 备份 / URL 访问 / 应用重启">
+  <PageCard :title="t('cron.title')" :subtitle="t('cron.subtitle')">
     <template #extra>
       <NButton type="primary" @click="openCreate">
         <template #icon>
           <NIcon><AddOutline /></NIcon>
         </template>
-        创建任务
+        {{ t('cron.createTask') }}
       </NButton>
     </template>
 
@@ -623,36 +622,41 @@ onMounted(() => {
   <!-- 创建/编辑任务对话框 -->
   <ModalForm
     :show="showForm"
-    :title="isEdit ? '编辑任务' : '创建任务'"
+    :title="isEdit ? t('cron.editTask') : t('cron.createTask')"
     :loading="formLoading"
     :width="640"
     @update:show="(v: boolean) => (showForm = v)"
     @submit="handleFormSubmit"
   >
     <NForm ref="formRef" :model="form" :rules="formRules" label-placement="top">
-      <NFormItem label="任务名称" path="name">
-        <NInput v-model:value="form.name" placeholder="例如：每日网站备份" clearable />
+      <NFormItem :label="t('cron.nameLabel')" path="name">
+        <NInput v-model:value="form.name" :placeholder="t('cron.namePlaceholder')" clearable />
       </NFormItem>
 
-      <NFormItem label="任务类型" path="type">
+      <NFormItem :label="t('cron.typeLabel')" path="type">
         <NRadioGroup v-model:value="form.type">
           <NSpace size="medium">
-            <NRadio value="shell">Shell 脚本</NRadio>
-            <NRadio value="backup">备份任务</NRadio>
-            <NRadio value="url">URL 访问</NRadio>
-            <NRadio value="app_restart">应用重启</NRadio>
+            <NRadio value="shell">{{ t('cron.typeOptions.shell') }}</NRadio>
+            <NRadio value="backup">{{ t('cron.typeOptions.backup') }}</NRadio>
+            <NRadio value="url">{{ t('cron.typeOptions.url') }}</NRadio>
+            <NRadio value="app_restart">{{ t('cron.typeOptions.app_restart') }}</NRadio>
+            <NRadio value="ssl_check">{{ t('cron.typeOptions.ssl_check') }}</NRadio>
+            <NRadio value="docker_cleanup">{{ t('cron.typeOptions.docker_cleanup') }}</NRadio>
+            <NRadio value="recycle_cleanup">{{ t('cron.typeOptions.recycle_cleanup') }}</NRadio>
+            <NRadio value="tamper_check">{{ t('cron.typeOptions.tamper_check') }}</NRadio>
+            <NRadio value="virus_scan">{{ t('cron.typeOptions.virus_scan') }}</NRadio>
           </NSpace>
         </NRadioGroup>
       </NFormItem>
 
       <!-- Cron 配置 -->
-      <NFormItem label="执行周期">
+      <NFormItem :label="t('cron.scheduleLabel')">
         <div class="cron-config">
           <div class="cron-config__mode">
             <NRadioGroup v-model:value="form.cronMode" size="small">
               <NSpace size="small">
-                <NRadio value="preset">预设</NRadio>
-                <NRadio value="custom">自定义</NRadio>
+                <NRadio value="preset">{{ t('cron.presetMode') }}</NRadio>
+                <NRadio value="custom">{{ t('cron.customMode') }}</NRadio>
               </NSpace>
             </NRadioGroup>
           </div>
@@ -661,7 +665,7 @@ onMounted(() => {
             <NSelect
               v-model:value="form.cronPreset"
               :options="cronPresets"
-              placeholder="选择预设周期"
+              :placeholder="t('cron.presetPlaceholder')"
               style="width: var(--input-2xl)"
             />
           </div>
@@ -669,23 +673,23 @@ onMounted(() => {
           <div v-else class="cron-config__custom">
             <NSpace size="small" align="center">
               <div class="cron-field">
-                <span class="cron-field__label">分</span>
+                <span class="cron-field__label">{{ t('cron.minuteLabel') }}</span>
                 <NInput v-model:value="form.cronMinute" placeholder="*" class="cron-field__input" />
               </div>
               <div class="cron-field">
-                <span class="cron-field__label">时</span>
+                <span class="cron-field__label">{{ t('cron.hourLabel') }}</span>
                 <NInput v-model:value="form.cronHour" placeholder="*" class="cron-field__input" />
               </div>
               <div class="cron-field">
-                <span class="cron-field__label">日</span>
+                <span class="cron-field__label">{{ t('cron.dayLabel') }}</span>
                 <NInput v-model:value="form.cronDay" placeholder="*" class="cron-field__input" />
               </div>
               <div class="cron-field">
-                <span class="cron-field__label">月</span>
+                <span class="cron-field__label">{{ t('cron.monthLabel') }}</span>
                 <NInput v-model:value="form.cronMonth" placeholder="*" class="cron-field__input" />
               </div>
               <div class="cron-field">
-                <span class="cron-field__label">周</span>
+                <span class="cron-field__label">{{ t('cron.weekLabel') }}</span>
                 <NInput v-model:value="form.cronWeek" placeholder="*" class="cron-field__input" />
               </div>
             </NSpace>
@@ -700,42 +704,54 @@ onMounted(() => {
       </NFormItem>
 
       <!-- 命令/目标 -->
-      <NFormItem v-if="form.type === 'shell'" label="Shell 命令" path="command">
+      <NFormItem v-if="form.type === 'shell'" :label="t('cron.commandLabel')" path="command">
         <NInput
           v-model:value="form.command"
           type="textarea"
-          placeholder="输入要执行的 Shell 命令"
+          :placeholder="t('cron.commandPlaceholder')"
           :rows="4"
         />
       </NFormItem>
 
-      <NFormItem v-if="form.type === 'backup'" label="备份类型" path="target">
+      <NFormItem v-if="form.type === 'backup'" :label="t('cron.backupTypeLabel')" path="target">
         <NSelect
           v-model:value="form.target"
           :options="backupTypeOptions"
-          placeholder="选择备份类型"
+          :placeholder="t('cron.backupPlaceholder')"
           clearable
         />
       </NFormItem>
 
-      <NFormItem v-if="form.type === 'url'" label="URL 地址" path="target">
+      <NFormItem v-if="form.type === 'url'" :label="t('cron.urlLabel')" path="target">
         <NInput
           v-model:value="form.target"
-          placeholder="例如 https://example.com/cron"
+          :placeholder="t('cron.urlPlaceholder')"
           clearable
         />
       </NFormItem>
 
-      <NFormItem v-if="form.type === 'app_restart'" label="容器名" path="target">
+      <NFormItem v-if="form.type === 'app_restart'" :label="t('cron.containerLabel')" path="target">
         <NInput
           v-model:value="form.target"
-          placeholder="例如 nginx / mysql"
+          :placeholder="t('cron.containerPlaceholder')"
           clearable
         />
       </NFormItem>
 
-      <NFormItem label="备注" path="remark">
-        <NInput v-model:value="form.remark" placeholder="可选备注信息" clearable />
+      <NFormItem v-if="form.type === 'virus_scan'" :label="t('cron.scanDirLabel')" path="target">
+        <NInput
+          v-model:value="form.target"
+          :placeholder="t('cron.scanDirPlaceholder')"
+          clearable
+        />
+      </NFormItem>
+
+      <NFormItem v-if="builtinTypes.includes(form.type)" :label="t('cron.paramsLabel')">
+        <div class="cron-builtin-hint">{{ t('cron.builtinHint') }}</div>
+      </NFormItem>
+
+      <NFormItem :label="t('cron.remarkLabel')" path="remark">
+        <NInput v-model:value="form.remark" :placeholder="t('cron.remarkPlaceholder')" clearable />
       </NFormItem>
     </NForm>
   </ModalForm>
@@ -748,7 +764,7 @@ onMounted(() => {
     @update:show="(v: boolean) => (showLogs = v)"
   >
     <NDrawerContent
-      :title="`执行日志 — ${logsTaskName}`"
+      :title="t('cron.logsTitle', { name: logsTaskName })"
       closable
     >
       <div class="logs-drawer">
@@ -766,9 +782,9 @@ onMounted(() => {
   <!-- 删除确认 -->
   <ConfirmDialog
     :show="showDelete"
-    title="删除任务"
-    :content="`确定要删除任务「${deleteName}」吗？此操作不可撤销。`"
-    confirm-text="删除"
+    :title="t('cron.deleteTitle')"
+    :content="t('cron.deleteContent', { name: deleteName })"
+    :confirm-text="t('cron.delete')"
     type="error"
     :loading="deleteLoading"
     @update:show="(v: boolean) => (showDelete = v)"
@@ -790,7 +806,7 @@ onMounted(() => {
 
 .cron-name__remark {
   font-size: var(--fs-caption);
-  color: var(--faint);
+  color: var(--text-quaternary);
 }
 
 .cron-expr {
@@ -807,7 +823,7 @@ onMounted(() => {
 
 .cron-expr__desc {
   font-size: var(--fs-caption);
-  color: var(--faint);
+  color: var(--text-quaternary);
 }
 
 /* Cron 配置区 */
@@ -832,7 +848,7 @@ onMounted(() => {
 
 .cron-field__label {
   font-size: var(--fs-caption);
-  color: var(--faint);
+  color: var(--text-quaternary);
 }
 
 .cron-field__input {
@@ -896,5 +912,11 @@ onMounted(() => {
 
 .log-output__detail {
   width: 100%;
+}
+
+.cron-builtin-hint {
+  font-size: var(--fs-caption);
+  color: var(--text-quaternary);
+  line-height: 1.6;
 }
 </style>

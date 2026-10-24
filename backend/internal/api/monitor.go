@@ -28,9 +28,27 @@ func RegisterMonitorRoutes(r *gin.RouterGroup) {
 	h := NewMonitorHandler(svc)
 
 	r.GET("/monitor/processes", middleware.RequirePermission(model.PermMonitorView), h.ListProcesses)
+	r.POST("/monitor/processes/kill", middleware.RequirePermission(model.PermMonitorUpdate), h.KillProcess)
 	r.GET("/monitor/disk", middleware.RequirePermission(model.PermMonitorView), h.DiskAnalysis)
 	r.GET("/monitor/network", middleware.RequirePermission(model.PermMonitorView), h.NetworkConnections)
 	r.GET("/monitor/history", middleware.RequirePermission(model.PermMonitorView), h.History)
+}
+
+// KillProcess POST /monitor/processes/kill - 终止进程（M-002）
+func (h *MonitorHandler) KillProcess(c *gin.Context) {
+	var req struct {
+		PID    int32 `json:"pid" binding:"required"`
+		Signal int32 `json:"signal"` // 15=SIGTERM(默认) 9=SIGKILL
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		common.Fail(c, common.CodeParamError, "参数错误: "+err.Error())
+		return
+	}
+	if err := h.svc.KillProcess(req.PID, req.Signal); err != nil {
+		common.Fail(c, common.CodeServerError, err.Error())
+		return
+	}
+	common.Success(c, gin.H{"killed": true, "pid": req.PID})
 }
 
 // ListProcesses GET /monitor/processes?top=20&sort=cpu - 进程列表

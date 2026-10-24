@@ -9,8 +9,8 @@ import (
 	"cloudpivot/internal/config"
 	"cloudpivot/internal/model"
 
-	"golang.org/x/crypto/bcrypt"
 	"github.com/glebarez/sqlite"
+	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
 

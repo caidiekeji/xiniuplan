@@ -1,29 +1,37 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, h } from 'vue'
-import { useMessage } from 'naive-ui'
+import { useI18n } from 'vue-i18n'
+import { useMessage } from '@/composables/useMessage'
+import { NButton, NSpace, NIcon, NSelect, NInput, NTag, NEmpty, NSpin, NAlert, NSwitch, NDrawer, NDrawerContent, NRadioGroup, NRadio, NProgress, NDropdown } from 'naive-ui'
+import type { DataTableColumns, DropdownOption } from 'naive-ui'
+import { PlayOutline, StopOutline, RefreshOutline, DocumentTextOutline, CopyOutline, ImagesOutline, EllipsisHorizontalOutline, TrashOutline } from '@vicons/ionicons5'
 import {
-  NButton, NSpace, NIcon, NSelect, NInput, NTag, NEmpty, NSpin,
-  NAlert, NSwitch, NDrawer, NDrawerContent, NRadioGroup, NRadio,
-  NFormItem, NForm, NModal, NProgress
-} from 'naive-ui'
-import type { DataTableColumns } from 'naive-ui'
-import {
-  PlayOutline, StopOutline, RefreshOutline, TrashOutline,
-  DocumentTextOutline, CubeOutline, CopyOutline, ImagesOutline, PulseOutline
-} from '@vicons/ionicons5'
-import {
-  PageCard, DataTable, StatusTag, ConfirmDialog, CodeEditor
+  PageCard, DataTable, StatusTag, ConfirmDialog, ContentModal, CodeEditor
 } from '@/components'
 import type { StatusType } from '@/components'
 import * as containerApi from '@/api/container'
-import type { Container, ContainerStatus, Image, PortMapping } from '@/api/container'
+import { formatDate } from '@/utils/format'
+import { subscribeSSE } from '@/utils/sse'
+import { useQueryState } from '@/composables/useQueryState'
+import type { Container, ContainerStatus, Image } from '@/api/container'
+
+import DockerResources from './DockerResources.vue'
+import Compose from './Compose.vue'
+import ExecTerminal from './ExecTerminal.vue'
 
 const message = useMessage()
+const { t, te } = useI18n()
 
 /* ==================== h() 辅助函数 ==================== */
 
 function monoEl(text: any) {
   return h('span', { class: 'mono' }, String(text ?? '-'))
+}
+
+/** 单行截断文本：超宽以省略号收尾并用 title 提示完整值，防止溢出压到相邻列（fixed 表格布局下 td 不会自动裁剪） */
+function clipEl(text: any, mono = true) {
+  const s = String(text ?? '-')
+  return h('div', { class: mono ? 'cell-clip mono' : 'cell-clip', title: s }, s)
 }
 
 function iconBtn(opts: { text: string; icon: any; onClick: () => void; type?: string; disabled?: boolean }) {
@@ -44,11 +52,6 @@ function btnGroup(children: any[]) {
 }
 
 /* ==================== 工具函数 ==================== */
-
-function formatTime(s: string): string {
-  if (!s) return '-'
-  return s.replace('T', ' ').substring(0, 19)
-}
 
 function shortId(id: string): string {
   return id ? id.substring(0, 12) : '-'
@@ -79,28 +82,23 @@ function mapStatus(status: ContainerStatus): StatusType {
   }
 }
 
-function statusText(status: ContainerStatus): string {
-  const map: Record<ContainerStatus, string> = {
-    running: '运行中',
-    stopped: '已停止',
-    exited: '已退出',
-    created: '已创建',
-    paused: '已暂停',
-    restarting: '重启中'
-  }
-  return map[status] || status
+function statusText(state: ContainerStatus): string {
+  // state 是归一化枚举（key 必存在）；te() 防御后端新增枚举时 key 泄漏给用户
+  const key = 'container.status.' + state
+  return te(key) ? t(key) : state
 }
 
 /* ==================== 筛选与搜索 ==================== */
 
-const statusFilter = ref<string>('all')
-const searchKeyword = ref('')
+// 筛选 / 搜索 / 分页 URL 化（D19）：刷新与深链可还原现场
+const statusFilter = useQueryState<string>('status', 'all')
+const searchKeyword = useQueryState('kw', '')
 
-const statusOptions = [
-  { label: '全部', value: 'all' },
-  { label: '运行中', value: 'running' },
-  { label: '已停止', value: 'stopped' }
-]
+const statusOptions = computed(() => [
+  { label: t('container.filter.all'), value: 'all' },
+  { label: t('container.status.running'), value: 'running' },
+  { label: t('container.status.stopped'), value: 'stopped' }
+])
 
 /* ==================== 容器列表 ==================== */
 
@@ -112,9 +110,9 @@ let pollTimer: ReturnType<typeof setInterval> | null = null
 const filteredContainers = computed(() => {
   let list = containers.value
   if (statusFilter.value === 'running') {
-    list = list.filter(c => c.status === 'running')
+    list = list.filter(c => c.state === 'running')
   } else if (statusFilter.value === 'stopped') {
-    list = list.filter(c => c.status !== 'running')
+    list = list.filter(c => c.state !== 'running')
   }
   if (searchKeyword.value.trim()) {
     const kw = searchKeyword.value.trim().toLowerCase()
@@ -134,7 +132,7 @@ async function loadContainers(silent = false) {
     const res = await containerApi.getContainers(true)
     containers.value = res.data.items
   } catch (e: any) {
-    dockerError.value = e.message || 'Docker 服务不可用，请检查 Docker 是否正常运行'
+    dockerError.value = e.message || t('container.messages.dockerUnavailable')
     containers.value = []
   } finally {
     if (!silent) containersLoading.value = false
@@ -167,10 +165,10 @@ async function handleStart(row: Container) {
   actionLoading.value[row.id] = true
   try {
     await containerApi.startContainer(row.id)
-    message.success(`容器 ${row.name} 已启动`)
+    message.success(t('container.messages.started', { name: row.name }))
     loadContainers(true)
   } catch (e: any) {
-    message.error(e.message || '启动失败')
+    message.error(e.message || t('container.messages.startFailed'))
   } finally {
     actionLoading.value[row.id] = false
   }
@@ -180,10 +178,10 @@ async function handleStop(row: Container) {
   actionLoading.value[row.id] = true
   try {
     await containerApi.stopContainer(row.id)
-    message.success(`容器 ${row.name} 已停止`)
+    message.success(t('container.messages.stopped', { name: row.name }))
     loadContainers(true)
   } catch (e: any) {
-    message.error(e.message || '停止失败')
+    message.error(e.message || t('container.messages.stopFailed'))
   } finally {
     actionLoading.value[row.id] = false
   }
@@ -193,10 +191,10 @@ async function handleRestart(row: Container) {
   actionLoading.value[row.id] = true
   try {
     await containerApi.restartContainer(row.id)
-    message.success(`容器 ${row.name} 已重启`)
+    message.success(t('container.messages.restarted', { name: row.name }))
     loadContainers(true)
   } catch (e: any) {
-    message.error(e.message || '重启失败')
+    message.error(e.message || t('container.messages.restartFailed'))
   } finally {
     actionLoading.value[row.id] = false
   }
@@ -218,11 +216,11 @@ async function doDelete() {
   deleteLoading.value = true
   try {
     await containerApi.removeContainer(targetContainer.value.id, true)
-    message.success(`容器 ${targetContainer.value.name} 已删除`)
+    message.success(t('container.messages.deleted', { name: targetContainer.value.name }))
     deleteConfirm.value = false
     loadContainers()
   } catch (e: any) {
-    message.error(e.message || '删除失败')
+    message.error(e.message || t('container.messages.deleteFailed'))
   } finally {
     deleteLoading.value = false
   }
@@ -236,19 +234,24 @@ const logContent = ref('')
 const logLoading = ref(false)
 const logTail = ref(500)
 const logFollow = ref(false)
-let logFollowTimer: ReturnType<typeof setInterval> | null = null
+// SSE 连接的取消函数（跟随模式下保持单条长连接）
+let logUnsubscribe: (() => void) | null = null
 
-const tailOptions = [
-  { label: '100 行', value: 100 },
-  { label: '500 行', value: 500 },
-  { label: '1000 行', value: 1000 }
-]
+const tailOptions = computed(() => [
+  { label: t('container.logs.tailLines', { n: 100 }), value: 100 },
+  { label: t('container.logs.tailLines', { n: 500 }), value: 500 },
+  { label: t('container.logs.tailLines', { n: 1000 }), value: 1000 }
+])
 
 async function openLogs(row: Container) {
   logContainer.value = row
   logContent.value = ''
   logDrawerVisible.value = true
   await loadLogs()
+  // 跟随开关已打开时，需要为新容器重建 SSE 连接
+  if (logFollow.value) {
+    startLogFollow()
+  }
 }
 
 /* ==================== 容器资源统计 ==================== */
@@ -267,7 +270,7 @@ async function openStats(row: Container) {
     const res = await containerApi.getContainerStats(row.id)
     statsData.value = res.data
   } catch (e: any) {
-    message.error(e.message || '获取容器资源统计失败')
+    message.error(e.message || t('container.messages.statsFailed'))
     statsModal.value = false
   } finally {
     statsLoading.value = false
@@ -278,32 +281,54 @@ async function loadLogs() {
   if (!logContainer.value) return
   logLoading.value = true
   try {
-    const res = await containerApi.getContainerLogs(logContainer.value.id, logTail.value, logFollow.value)
-    logContent.value = res.data.content || '(无日志输出)'
+    // 跟随模式下走 SSE 流，不能用 axios（响应永不结束会挂起）
+    if (logFollow.value) {
+      logContent.value = ''
+      return
+    }
+    const res = await containerApi.getContainerLogs(logContainer.value.id, logTail.value, false)
+    logContent.value = res.data.content || t('container.logs.empty')
   } catch (e: any) {
-    logContent.value = `获取日志失败: ${e.message || '未知错误'}`
+    logContent.value = t('container.logs.loadFailed', { msg: e.message || t('container.unknownError') })
   } finally {
     logLoading.value = false
   }
 }
 
+/**
+ * 启动日志跟随。
+ *
+ * 早期实现用 setInterval 每 3 秒用 axios 请求一次 follow=true —— SSE 响应
+ * 永不结束，每个请求都会一直挂起直到超时，请求越堆越多，页面越来越卡。
+ * 现在改为建立单条 SSE 长连接，服务端逐行推送。
+ */
 function startLogFollow() {
   stopLogFollow()
-  logFollowTimer = setInterval(() => {
-    if (logDrawerVisible.value && logContainer.value) {
-      containerApi.getContainerLogs(logContainer.value.id, logTail.value, true)
-        .then(res => {
-          logContent.value = res.data.content || '(无日志输出)'
-        })
-        .catch(() => {})
+  if (!logContainer.value) return
+
+  const containerId = logContainer.value.id
+  const lines: string[] = []
+
+  logUnsubscribe = subscribeSSE(
+    `/containers/${encodeURIComponent(containerId)}/logs?tail=${logTail.value}&follow=true`,
+    (line) => {
+      lines.push(line)
+      // 只保留最近 2000 行，避免长时间跟随后内存无限增长
+      if (lines.length > 2000) lines.splice(0, lines.length - 2000)
+      logContent.value = lines.join('\n')
+    },
+    () => {
+      // 连接中断：结束跟随状态，避免界面显示「跟随中」但实际没在跟
+      logFollow.value = false
+      stopLogFollow()
     }
-  }, 3000)
+  )
 }
 
 function stopLogFollow() {
-  if (logFollowTimer) {
-    clearInterval(logFollowTimer)
-    logFollowTimer = null
+  if (logUnsubscribe) {
+    logUnsubscribe()
+    logUnsubscribe = null
   }
 }
 
@@ -331,9 +356,9 @@ function closeLogDrawer() {
 async function copyLogs() {
   try {
     await navigator.clipboard.writeText(logContent.value)
-    message.success('日志已复制到剪贴板')
+    message.success(t('container.messages.copySuccess'))
   } catch {
-    message.error('复制失败，请手动选择复制')
+    message.error(t('container.messages.copyFailed'))
   }
 }
 
@@ -349,7 +374,7 @@ async function loadImages() {
     const res = await containerApi.getImages()
     images.value = res.data
   } catch (e: any) {
-    message.error(e.message || '加载镜像列表失败')
+    message.error(e.message || t('container.messages.loadImagesFailed'))
     images.value = []
   } finally {
     imagesLoading.value = false
@@ -363,107 +388,173 @@ function toggleImages(val: boolean) {
   }
 }
 
-const imageColumns: DataTableColumns = [
+/* --- 镜像删除确认 --- */
+
+const imageDeleteConfirm = ref(false)
+const imageDeleteLoading = ref(false)
+const targetImage = ref<Image | null>(null)
+
+/** 镜像展示名：优先取第一个 tag，悬空镜像回退到短 ID */
+function imageDisplayName(img: Image | null): string {
+  if (!img) return ''
+  return img.tags?.[0] || shortId(img.id)
+}
+
+function confirmImageDelete(row: Image) {
+  targetImage.value = row
+  imageDeleteConfirm.value = true
+}
+
+async function doImageDelete() {
+  if (!targetImage.value) return
+  imageDeleteLoading.value = true
+  try {
+    await containerApi.removeImage(targetImage.value.id, true)
+    message.success(t('container.messages.imageDeleted', { name: imageDisplayName(targetImage.value) }))
+    imageDeleteConfirm.value = false
+    loadImages()
+  } catch (e: any) {
+    message.error(e.message || t('container.messages.imageDeleteFailed'))
+  } finally {
+    imageDeleteLoading.value = false
+  }
+}
+
+const imageColumns = computed<DataTableColumns>(() => [
   {
-    title: '镜像', key: 'repo_tags',
-    render: (row: any) => monoEl(row.repo_tags?.[0] || '<none>')
+    // 后端镜像 DTO 字段是 tags（backend/internal/dto/container.go），
+    // 此前误写 repo_tags，导致镜像名称列恒为 <none>
+    title: t('container.imageColumns.image'), key: 'tags',
+    render: (row: any) => monoEl(row.tags?.[0] || '<none>')
   },
-  { title: 'ID', key: 'id', width: 160, render: (row: any) => monoEl(shortId(row.id)) },
-  { title: '大小', key: 'size', width: 120, render: (row: any) => monoEl(formatSize(row.size)) },
-  { title: '创建时间', key: 'created_at', width: 180, render: (row: any) => formatTime(row.created_at) }
-]
+  { title: t('container.imageColumns.id'), key: 'id', width: 160, render: (row: any) => monoEl(shortId(row.id)) },
+  { title: t('container.imageColumns.size'), key: 'size', width: 120, render: (row: any) => monoEl(formatSize(row.size)) },
+  {
+    title: t('container.imageColumns.createdAt'), key: 'created', width: 150,
+    // 与容器表同源契约：镜像 created 也是 unix 秒，此前误写 created_at 一直显示 "-"
+    render: (row: any) => row.created
+      ? clipEl(formatDate(row.created * 1000), false)
+      : h('span', { class: 'faint-text' }, '-')
+  },
+  {
+    title: t('container.columns.actions'), key: 'actions', width: 90,
+    render: (row: any) => btnGroup([
+      iconBtn({
+        text: t('container.actions.delete'), icon: TrashOutline, type: 'error',
+        disabled: imageDeleteLoading.value && targetImage.value?.id === row.id,
+        onClick: () => confirmImageDelete(row)
+      })
+    ])
+  }
+])
 
 /* ==================== 表格列定义 ==================== */
 
-const containerColumns: DataTableColumns = [
+const containerColumns = computed<DataTableColumns>(() => [
   {
-    title: '名称', key: 'name', width: 220,
-    render: (row: any) => h('div', { class: 'cell-name' }, [
-      h('div', { class: 'cell-name__main' }, row.name),
-      h('div', { class: 'cell-name__sub mono' }, shortId(row.id))
+    title: t('container.columns.name'), key: 'name', width: 200,
+    render: (row: any) => h('div', { class: 'cell-name', title: row.name }, [
+      h('div', { class: 'cell-name__main cell-clip' }, row.name),
+      h('div', { class: 'cell-name__sub mono cell-clip' }, shortId(row.id))
     ])
   },
   {
-    title: '镜像', key: 'image', width: 200,
-    render: (row: any) => monoEl(row.image)
+    title: t('container.columns.image'), key: 'image', width: 180,
+    render: (row: any) => clipEl(row.image)
   },
   {
-    title: '状态', key: 'status', width: 110,
+    title: t('container.columns.status'), key: 'status', width: 110,
     render: (row: any) => h(StatusTag, {
-      status: mapStatus(row.status as ContainerStatus),
-      text: statusText(row.status as ContainerStatus)
+      // state 是归一化枚举；status 是 Docker 原始描述（"Exited (0) 39 hours ago"），传给 key 会泄漏原文并撑爆单元格
+      status: mapStatus(row.state as ContainerStatus),
+      text: statusText(row.state as ContainerStatus)
     })
   },
   {
-    title: '端口映射', key: 'ports', width: 200,
+    title: t('container.columns.ports'), key: 'ports', width: 170,
     render: (row: any) => {
-      const ports: PortMapping[] = row.ports || []
-      if (ports.length === 0) return h('span', { class: 'faint-text' }, '-')
+      // 后端契约：ports 为逗号分隔字符串（如 "0.0.0.0:8080->80/tcp"），非数组
+      const list = String(row.ports || '').split(',').map((s) => s.trim()).filter(Boolean)
+      if (list.length === 0) return h('span', { class: 'faint-text' }, '-')
       return h(NSpace, { size: 4, wrapItem: true, wrap: true }, {
-        default: () => ports.map((p, i) =>
+        default: () => list.map((p, i) =>
           h(NTag, {
             key: i,
             size: 'small',
             bordered: false,
-            type: 'info' as any
+            type: 'info' as any,
+            class: 'port-tag',
+            title: p
           }, {
-            default: () => `${p.host_port}:${p.container_port}/${p.protocol}`
+            default: () => p
           })
         )
       })
     }
   },
   {
-    title: '创建时间', key: 'created_at', width: 170,
-    render: (row: any) => formatTime(row.created_at)
+    title: t('container.columns.createdAt'), key: 'created', width: 140,
+    // 契约字段是 created（unix 秒）；此前误写 created_at，该列一直显示 "-"
+    render: (row: any) => row.created
+      ? clipEl(formatDate(row.created * 1000), false)
+      : h('span', { class: 'faint-text' }, '-')
   },
   {
-    title: '操作', key: 'actions', width: 280,
+    title: t('container.columns.actions'), key: 'actions', width: 120,
     render: (row: any) => {
-      const isRunning = row.status === 'running'
+      const isRunning = row.state === 'running'
       const loading = isActionLoading(row.id)
-      const children: any[] = []
-      if (!isRunning) {
-        children.push(iconBtn({
-          text: '启动', icon: PlayOutline, type: 'success',
-          disabled: loading,
-          onClick: () => handleStart(row)
-        }))
-      } else {
-        children.push(iconBtn({
-          text: '停止', icon: StopOutline, type: 'warning',
-          disabled: loading,
-          onClick: () => handleStop(row)
-        }))
-      }
-      children.push(iconBtn({
-        text: '重启', icon: RefreshOutline,
+      // 主位只留最高频的一个动作，其余收进 ⋯ 下拉（与文件管理页同款范式），避免 6 按钮换行挤压
+      const primary = isRunning
+        ? iconBtn({
+            text: t('container.actions.stop'), icon: StopOutline, type: 'warning',
+            disabled: loading,
+            onClick: () => handleStop(row)
+          })
+        : iconBtn({
+            text: t('container.actions.start'), icon: PlayOutline, type: 'success',
+            disabled: loading,
+            onClick: () => handleStart(row)
+          })
+      const menu: DropdownOption[] = [
+        { key: 'restart', label: t('container.actions.restart') },
+        { key: 'logs', label: t('container.actions.logs') },
+        ...(isRunning ? [
+          { key: 'terminal', label: t('container.actions.terminal') },
+          { key: 'stats', label: t('container.actions.stats') }
+        ] : []),
+        { key: 'delete', label: () => h('span', { class: 'menu-danger' }, t('container.actions.delete')) }
+      ]
+      const more = h(NDropdown, {
+        options: menu,
+        trigger: 'click',
         disabled: loading,
-        onClick: () => handleRestart(row)
-      }))
-      children.push(iconBtn({
-        text: '日志', icon: DocumentTextOutline, type: 'primary',
-        onClick: () => openLogs(row)
-      }))
-      if (isRunning) {
-        children.push(iconBtn({
-          text: '资源', icon: PulseOutline, type: 'info',
-          onClick: () => openStats(row)
-        }))
-      }
-      children.push(iconBtn({
-        text: '删除', icon: TrashOutline, type: 'error',
-        disabled: loading,
-        onClick: () => confirmDelete(row)
-      }))
-      return btnGroup(children)
+        onSelect: (key: string | number) => handleRowAction(String(key), row)
+      }, {
+        default: () => h(NButton, {
+          size: 'tiny', quaternary: true, disabled: loading,
+          title: t('container.actions.more')
+        }, {
+          default: () => h(NIcon, { size: 14 }, { default: () => h(EllipsisHorizontalOutline) })
+        })
+      })
+      return btnGroup([primary, more])
     }
   }
-]
+])
+
+/** ⋯ 下拉菜单分发 */
+function handleRowAction(key: string, row: Container) {
+  if (key === 'restart') handleRestart(row)
+  else if (key === 'logs') openLogs(row)
+  else if (key === 'terminal') openExec(row)
+  else if (key === 'stats') openStats(row)
+  else if (key === 'delete') confirmDelete(row)
+}
 
 /* ==================== 分页 ==================== */
 
-const containerPage = ref(1)
+const containerPage = useQueryState('page', 1)
 const containerPageSize = ref(20)
 
 const containerPagination = computed(() => ({
@@ -487,13 +578,24 @@ onBeforeUnmount(() => {
   stopPolling()
   stopLogFollow()
 })
+
+/* ==================== 容器终端（C-004） ==================== */
+const execVisible = ref(false)
+const execContainerId = ref('')
+const execContainerName = ref('')
+
+function openExec(row: any) {
+  execContainerId.value = row.id
+  execContainerName.value = row.name
+  execVisible.value = true
+}
 </script>
 
 <template>
-  <PageCard title="容器管理" subtitle="Docker 容器生命周期管理 · 实时日志 · 镜像浏览">
+  <PageCard :title="t('container.title')" :subtitle="t('container.subtitle')">
     <template #extra>
       <NButton @click="() => loadContainers()" :loading="containersLoading">
-        <template #icon><NIcon><RefreshOutline /></NIcon></template>刷新
+        <template #icon><NIcon><RefreshOutline /></NIcon></template>{{ t('container.refresh') }}
       </NButton>
     </template>
 
@@ -518,7 +620,7 @@ onBeforeUnmount(() => {
           />
           <NInput
             v-model:value="searchKeyword"
-            placeholder="搜索容器名 / 镜像 / ID"
+            :placeholder="t('container.searchPlaceholder')"
             clearable
             style="width: var(--input-3xl)"
           >
@@ -528,7 +630,7 @@ onBeforeUnmount(() => {
           </NInput>
         </NSpace>
         <NSpace align="center">
-          <span class="filter-label">显示镜像</span>
+          <span class="filter-label">{{ t('container.showImagesLabel') }}</span>
           <NSwitch :value="showImages" @update:value="toggleImages" />
         </NSpace>
       </div>
@@ -545,9 +647,9 @@ onBeforeUnmount(() => {
       />
 
       <div v-if="filteredContainers.length === 0 && !containersLoading" class="empty-hint">
-        <NEmpty :description="searchKeyword || statusFilter !== 'all' ? '没有匹配的容器' : '暂无容器'">
+        <NEmpty :description="searchKeyword || statusFilter !== 'all' ? t('container.empty.noMatch') : t('container.empty.noContainer')">
           <NButton size="small" @click="() => loadContainers()">
-            <template #icon><NIcon><RefreshOutline /></NIcon></template>刷新
+            <template #icon><NIcon><RefreshOutline /></NIcon></template>{{ t('container.refresh') }}
           </NButton>
         </NEmpty>
       </div>
@@ -556,9 +658,9 @@ onBeforeUnmount(() => {
       <div v-if="showImages" class="images-section">
         <div class="images-section__header">
           <NIcon :size="16"><ImagesOutline /></NIcon>
-          <span class="images-section__title">镜像列表</span>
+          <span class="images-section__title">{{ t('container.imagesTitle') }}</span>
           <NButton size="tiny" text @click="loadImages" :loading="imagesLoading">
-            <template #icon><NIcon><RefreshOutline /></NIcon></template>刷新
+            <template #icon><NIcon><RefreshOutline /></NIcon></template>{{ t('container.refresh') }}
           </NButton>
         </div>
         <DataTable
@@ -570,7 +672,7 @@ onBeforeUnmount(() => {
           :row-key="(row: any) => row.id"
         />
         <div v-if="images.length === 0 && !imagesLoading" class="empty-hint empty-hint--sm">
-          <NEmpty description="暂无镜像" />
+          <NEmpty :description="t('container.empty.noImages')" />
         </div>
       </div>
     </template>
@@ -583,12 +685,12 @@ onBeforeUnmount(() => {
       @update:show="(v: boolean) => { if (!v) closeLogDrawer() }"
     >
       <NDrawerContent
-        :title="logContainer ? `容器日志 - ${logContainer.name}` : '容器日志'"
+        :title="logContainer ? t('container.logs.title', { name: logContainer.name }) : t('container.logs.titlePlain')"
         closable
       >
         <div class="log-toolbar">
           <NSpace align="center">
-            <span class="log-label">尾部行数</span>
+            <span class="log-label">{{ t('container.logs.tail') }}</span>
             <NRadioGroup v-model:value="logTail" @update:value="handleLogTailChange">
               <NSpace>
                 <NRadio v-for="opt in tailOptions" :key="opt.value" :value="opt.value">
@@ -598,13 +700,13 @@ onBeforeUnmount(() => {
             </NRadioGroup>
           </NSpace>
           <NSpace align="center">
-            <span class="log-label">实时跟随</span>
+            <span class="log-label">{{ t('container.logs.follow') }}</span>
             <NSwitch :value="logFollow" @update:value="handleFollowChange" />
             <NButton size="small" @click="loadLogs" :loading="logLoading">
-              <template #icon><NIcon><RefreshOutline /></NIcon></template>刷新
+              <template #icon><NIcon><RefreshOutline /></NIcon></template>{{ t('container.refresh') }}
             </NButton>
             <NButton size="small" @click="copyLogs">
-              <template #icon><NIcon><CopyOutline /></NIcon></template>复制
+              <template #icon><NIcon><CopyOutline /></NIcon></template>{{ t('container.logs.copy') }}
             </NButton>
           </NSpace>
         </div>
@@ -626,20 +728,31 @@ onBeforeUnmount(() => {
     <!-- 删除确认 -->
     <ConfirmDialog
       v-model:show="deleteConfirm"
-      title="删除容器"
-      :content="`确定要删除容器「${targetContainer?.name}」吗？此操作不可恢复，容器内未持久化的数据将丢失。`"
+      :title="t('container.deleteDialog.title')"
+      :content="t('container.deleteDialog.content', { name: targetContainer?.name || '' })"
       type="error"
-      confirm-text="删除"
+      :confirm-text="t('container.deleteDialog.confirm')"
       :loading="deleteLoading"
       @confirm="doDelete"
     />
 
+    <!-- 镜像删除确认 -->
+    <ConfirmDialog
+      v-model:show="imageDeleteConfirm"
+      :title="t('container.imageDeleteDialog.title')"
+      :content="t('container.imageDeleteDialog.content', { name: imageDisplayName(targetImage) })"
+      type="error"
+      :confirm-text="t('container.imageDeleteDialog.confirm')"
+      :loading="imageDeleteLoading"
+      @confirm="doImageDelete"
+    />
+
     <!-- 资源统计 -->
-    <NModal v-model:show="statsModal" preset="card" :title="`资源统计 - ${statsContainer?.name || ''}`" :style="{ width: 'min(460px, 92vw)' }">
+    <ContentModal v-model:show="statsModal" :title="t('container.stats.title', { name: statsContainer?.name || '' })" size="sm">
       <NSpin :show="statsLoading">
         <div v-if="statsData" class="stats-body">
           <div class="stats-row">
-            <span class="stats-label">CPU 使用率</span>
+            <span class="stats-label">{{ t('container.stats.cpuUsage') }}</span>
             <NProgress
               type="line"
               :percentage="Math.min(100, statsData.cpu_percent)"
@@ -650,7 +763,7 @@ onBeforeUnmount(() => {
             <span class="mono stats-value">{{ statsData.cpu_percent.toFixed(2) }}%</span>
           </div>
           <div class="stats-row">
-            <span class="stats-label">内存使用</span>
+            <span class="stats-label">{{ t('container.stats.memoryUsage') }}</span>
             <NProgress
               type="line"
               :percentage="Math.min(100, statsData.memory_percent)"
@@ -658,12 +771,16 @@ onBeforeUnmount(() => {
               indicator-placement="inside"
               :color="statsData.memory_percent > 80 ? 'var(--err)' : 'var(--acc)'"
             />
-            <span class="mono stats-value">{{ statsData.memory_usage }} / {{ statsData.memory_limit }}（{{ statsData.memory_percent.toFixed(2) }}%）</span>
+            <span class="mono stats-value">{{ t('container.stats.memoryValue', { usage: statsData.memory_usage, limit: statsData.memory_limit, percent: statsData.memory_percent.toFixed(2) }) }}</span>
           </div>
         </div>
       </NSpin>
-    </NModal>
+    </ContentModal>
   </PageCard>
+
+  <DockerResources />
+  <Compose />
+  <ExecTerminal v-model:show="execVisible" :container-id="execContainerId" :name="execContainerName" />
 </template>
 
 <style scoped>
@@ -695,6 +812,28 @@ onBeforeUnmount(() => {
   padding: var(--space-5) 0;
 }
 
+/* 单行截断：fixed 表格布局下 td 不裁剪内容，长文本必须由自身收敛，否则会压到相邻列 */
+.cell-clip {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.menu-danger {
+  color: var(--err);
+}
+
+.port-tag {
+  max-width: 100%;
+}
+
+.port-tag :deep(.n-tag__content) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .cell-name__main {
   font-weight: 500;
   color: var(--ink);
@@ -703,12 +842,12 @@ onBeforeUnmount(() => {
 
 .cell-name__sub {
   font-size: var(--fs-caption);
-  color: var(--faint);
-  margin-top: 2px;
+  color: var(--text-quaternary);
+  margin-top: var(--space-0);
 }
 
 .faint-text {
-  color: var(--faint);
+  color: var(--text-quaternary);
 }
 
 /* 镜像区域 */
@@ -770,20 +909,20 @@ onBeforeUnmount(() => {
 .stats-body {
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  padding: 4px 0;
+  gap: var(--space-4);
+  padding: var(--space-1) 0;
 }
 
 .stats-row {
   display: grid;
   grid-template-columns: 90px 1fr auto;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .stats-label {
   font-size: 13px;
-  color: var(--faint);
+  color: var(--text-quaternary);
 }
 
 .stats-value {

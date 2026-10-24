@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, h } from 'vue'
-import {
-  NButton, NIcon, NForm, NFormItem, NInput, NCheckbox,
-  NCheckboxGroup, NSpace, NTag, useMessage
-} from 'naive-ui'
+import { useI18n } from 'vue-i18n'
+import { NButton, NIcon, NForm, NFormItem, NInput, NCheckbox, NCheckboxGroup, NSpace } from 'naive-ui'
+import { useMessage } from '@/composables/useMessage'
 import {
   AddOutline, CreateOutline, TrashOutline
 } from '@vicons/ionicons5'
@@ -18,6 +17,7 @@ import {
 import type { DataTableColumns } from 'naive-ui'
 
 const message = useMessage()
+const { t } = useI18n()
 
 /* ========== 列表状态 ========== */
 const loading = ref(false)
@@ -31,7 +31,7 @@ async function loadRoles() {
       roles.value = res.data
     }
   } catch (err: any) {
-    message.error(err.message || '加载角色列表失败')
+    message.error(err.message || t('roleList.messages.loadError'))
   } finally {
     loading.value = false
   }
@@ -61,26 +61,26 @@ async function loadPermissions() {
 
 function defaultPermissionGroups(): PermissionGroup[] {
   const modules = [
-    { module: 'site', label: '网站' },
-    { module: 'database', label: '数据库' },
-    { module: 'file', label: '文件' },
-    { module: 'terminal', label: '终端' },
-    { module: 'container', label: '容器' },
-    { module: 'appstore', label: '应用商店' },
-    { module: 'firewall', label: '防火墙' },
-    { module: 'backup', label: '备份' },
-    { module: 'monitor', label: '监控' },
-    { module: 'user', label: '用户' },
-    { module: 'audit', label: '审计' },
-    { module: 'setting', label: '设置' },
-    { module: 'alert', label: '告警' },
-    { module: 'cron', label: '计划任务' }
+    { module: 'site', label: t('roleList.permissions.modules.site') },
+    { module: 'database', label: t('roleList.permissions.modules.database') },
+    { module: 'file', label: t('roleList.permissions.modules.file') },
+    { module: 'terminal', label: t('roleList.permissions.modules.terminal') },
+    { module: 'container', label: t('roleList.permissions.modules.container') },
+    { module: 'appstore', label: t('roleList.permissions.modules.appstore') },
+    { module: 'firewall', label: t('roleList.permissions.modules.firewall') },
+    { module: 'backup', label: t('roleList.permissions.modules.backup') },
+    { module: 'monitor', label: t('roleList.permissions.modules.monitor') },
+    { module: 'user', label: t('roleList.permissions.modules.user') },
+    { module: 'audit', label: t('roleList.permissions.modules.audit') },
+    { module: 'setting', label: t('roleList.permissions.modules.setting') },
+    { module: 'alert', label: t('roleList.permissions.modules.alert') },
+    { module: 'cron', label: t('roleList.permissions.modules.cron') }
   ]
   const actions = [
-    { code: 'view', label: '查看' },
-    { code: 'create', label: '创建' },
-    { code: 'update', label: '修改' },
-    { code: 'delete', label: '删除' }
+    { code: 'view', label: t('roleList.permissions.actions.view') },
+    { code: 'create', label: t('roleList.permissions.actions.create') },
+    { code: 'update', label: t('roleList.permissions.actions.update') },
+    { code: 'delete', label: t('roleList.permissions.actions.delete') }
   ]
   return modules.map((m) => ({
     module: m.module,
@@ -95,13 +95,13 @@ function defaultPermissionGroups(): PermissionGroup[] {
 /* ========== 表格列 ========== */
 const columns = computed(() => [
   {
-    title: '角色名称',
+    title: t('roleList.columns.name'),
     key: 'name',
     width: 160,
     render: (row: any) => h('span', { style: 'font-weight:500;color:var(--ink)' }, row.name)
   },
   {
-    title: '角色编码',
+    title: t('roleList.columns.code'),
     key: 'code',
     width: 180,
     render: (row: any) => h('span', {
@@ -110,12 +110,12 @@ const columns = computed(() => [
     }, row.code)
   },
   {
-    title: '描述',
+    title: t('roleList.columns.description'),
     key: 'description',
     render: (row: any) => h('span', { style: 'color:var(--sub)' }, row.description || '—')
   },
   {
-    title: '权限数量',
+    title: t('roleList.columns.permissions'),
     key: 'permissions',
     width: 110,
     render: (row: any) => h('span', {
@@ -124,16 +124,16 @@ const columns = computed(() => [
     }, String(row.permissions?.length || 0))
   },
   {
-    title: '类型',
+    title: t('roleList.columns.type'),
     key: 'is_system',
     width: 100,
     render: (row: any) => h(StatusTag, {
       status: row.is_system ? 'warning' as StatusType : 'running' as StatusType,
-      text: row.is_system ? '内置' : '自定义'
+      text: row.is_system ? t('roleList.status.builtIn') : t('roleList.status.custom')
     })
   },
   {
-    title: '操作',
+    title: t('roleList.columns.actions'),
     key: 'actions',
     width: 160,
     render: (row: any) => {
@@ -146,7 +146,7 @@ const columns = computed(() => [
             onClick: () => openEdit(row)
           }, {
             icon: () => h(NIcon, null, { default: () => h(CreateOutline) }),
-            default: () => '编辑'
+            default: () => t('roleList.actions.edit')
           }),
           !row.is_system
             ? h(NButton, {
@@ -157,7 +157,7 @@ const columns = computed(() => [
                 onClick: () => openDelete(row)
               }, {
                 icon: () => h(NIcon, null, { default: () => h(TrashOutline) }),
-                default: () => '删除'
+                default: () => t('roleList.actions.delete')
               })
             : null
         ]
@@ -183,18 +183,18 @@ const form = reactive({
   permissions: [] as string[]
 })
 
-const formRules = {
+const formRules = computed(() => ({
   name: {
     required: true,
-    message: '请输入角色名称',
+    message: t('roleList.hints.nameRequired'),
     trigger: 'blur'
   },
   code: {
     required: true,
-    message: '请输入角色编码',
+    message: t('roleList.hints.codeRequired'),
     trigger: 'blur'
   }
-}
+}))
 
 /* 权限矩阵全选/半选状态 */
 function getModulePermissions(moduleCode: string): string[] {
@@ -280,7 +280,7 @@ async function handleFormSubmit() {
         description: form.description,
         permissions: form.permissions
       })
-      message.success('角色已更新')
+      message.success(t('roleList.messages.updated'))
     } else {
       await createRole({
         name: form.name,
@@ -288,12 +288,12 @@ async function handleFormSubmit() {
         description: form.description,
         permissions: form.permissions
       })
-      message.success('角色已创建')
+      message.success(t('roleList.messages.created'))
     }
     showForm.value = false
     loadRoles()
   } catch (err: any) {
-    message.error(err.message || '保存失败')
+    message.error(err.message || t('roleList.messages.saveFailed'))
   } finally {
     formLoading.value = false
   }
@@ -316,11 +316,11 @@ async function handleDeleteConfirm() {
   deleteLoading.value = true
   try {
     await deleteRole(deleteId.value)
-    message.success('角色已删除')
+    message.success(t('roleList.messages.deleted'))
     showDelete.value = false
     loadRoles()
   } catch (err: any) {
-    message.error(err.message || '删除失败')
+    message.error(err.message || t('roleList.messages.deleteFailed'))
   } finally {
     deleteLoading.value = false
   }
@@ -333,13 +333,13 @@ onMounted(() => {
 </script>
 
 <template>
-  <PageCard title="角色权限" subtitle="管理系统角色及其权限分配">
+  <PageCard :title="t('roleList.title')" :subtitle="t('roleList.subtitle')">
     <template #extra>
       <NButton type="primary" @click="openCreate">
         <template #icon>
           <NIcon><AddOutline /></NIcon>
         </template>
-        创建角色
+        {{ t('roleList.createRole') }}
       </NButton>
     </template>
 
@@ -355,7 +355,7 @@ onMounted(() => {
   <!-- 创建/编辑角色对话框 -->
   <ModalForm
     :show="showForm"
-    :title="isEdit ? '编辑角色' : '创建角色'"
+    :title="isEdit ? t('roleList.editRole') : t('roleList.createRole')"
     :loading="formLoading"
     :width="720"
     @update:show="(v: boolean) => (showForm = v)"
@@ -363,26 +363,26 @@ onMounted(() => {
   >
     <NForm ref="formRef" :model="form" :rules="formRules" label-placement="top">
       <div class="role-form__grid">
-        <NFormItem label="角色名称" path="name">
-          <NInput v-model:value="form.name" placeholder="例如：运维工程师" clearable />
+        <NFormItem :label="t('roleList.labels.name')" path="name">
+          <NInput v-model:value="form.name" :placeholder="t('roleList.hints.name')" clearable />
         </NFormItem>
 
-        <NFormItem label="角色编码" path="code">
+        <NFormItem :label="t('roleList.labels.code')" path="code">
           <NInput
             v-model:value="form.code"
-            placeholder="例如：ops_engineer"
+            :placeholder="t('roleList.hints.code')"
             :disabled="isEdit"
             clearable
           />
         </NFormItem>
       </div>
 
-      <NFormItem label="描述" path="description">
-        <NInput v-model:value="form.description" placeholder="可选描述信息" clearable />
+      <NFormItem :label="t('roleList.labels.description')" path="description">
+        <NInput v-model:value="form.description" :placeholder="t('roleList.hints.description')" clearable />
       </NFormItem>
 
       <!-- 权限矩阵 -->
-      <NFormItem label="权限分配">
+      <NFormItem :label="t('roleList.labels.permissions')">
         <div class="perm-matrix">
           <!-- 全选 -->
           <div class="perm-matrix__header">
@@ -391,10 +391,10 @@ onMounted(() => {
               :indeterminate="isAllIndeterminate"
               @update:checked="toggleAll"
             >
-              全选
+              {{ t('roleList.matrix.selectAll') }}
             </NCheckbox>
             <span class="perm-matrix__count mono tabular-nums">
-              已选 {{ form.permissions.length }} / {{ allPermissionCodes.length }}
+              {{ t('roleList.matrix.selected', { selected: form.permissions.length, total: allPermissionCodes.length }) }}
             </span>
           </div>
 
@@ -433,9 +433,9 @@ onMounted(() => {
   <!-- 删除确认 -->
   <ConfirmDialog
     :show="showDelete"
-    title="删除角色"
-    :content="`确定要删除角色「${deleteName}」吗？此操作不可撤销。`"
-    confirm-text="删除"
+    :title="t('roleList.delete.title')"
+    :content="t('roleList.delete.content', { name: deleteName })"
+    :confirm-text="t('roleList.actions.delete')"
     type="error"
     :loading="deleteLoading"
     @update:show="(v: boolean) => (showDelete = v)"
@@ -468,7 +468,7 @@ onMounted(() => {
 
 .perm-matrix__count {
   font-size: var(--fs-caption);
-  color: var(--faint);
+  color: var(--text-quaternary);
 }
 
 .perm-matrix__groups {

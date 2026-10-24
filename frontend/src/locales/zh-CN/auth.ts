@@ -7,7 +7,7 @@ export default {
   loggingIn: '登录中',
   totpVerify: 'TOTP验证',
   welcomeBack: '欢迎回来',
-  loginSubtitle: '登录以管理您的服务器',
+  loginSubtitle: '登录以管理服务器',
   loginFailed: '登录失败，请检查用户名和密码',
   twoFactorAuth: '二次验证',
   totpSubtitle: '请输入验证器中的动态码完成登录',
@@ -26,5 +26,16 @@ export default {
   uptimeLabel: '运行时长',
   moduleLabel: '功能模块',
   versionLabel: '面板版本',
-  systemNormal: '系统运行正常 · 所有服务在线'
+  systemNormal: '系统运行正常 · 所有服务在线',
+  forgot: {
+    link: '忘记密码？',
+    title: '忘记密码',
+    tip: '输入用户名和绑定的邮箱，系统将发送密码重置链接（需先在"系统设置"中配置 SMTP）。',
+    requiredFields: '请输入用户名和绑定邮箱',
+    usernamePlaceholder: '用户名',
+    emailPlaceholder: '绑定邮箱',
+    send: '发送重置链接',
+    sentTip: '如果用户名和邮箱匹配，重置链接将发送到该邮箱（30 分钟内有效）。请查收邮件后重置密码。',
+    sendFailed: '发送失败，请稍后重试'
+  }
 }

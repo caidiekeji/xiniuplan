@@ -1,4 +1,12 @@
 export default {
+  navLabel: '主导航',
+  groups: {
+    overview: '概览',
+    apps: '应用',
+    ops: '运维',
+    security: '安全',
+    system: '系统'
+  },
   dashboard: '仪表盘',
   website: '网站管理',
   database: '数据库',
@@ -16,5 +24,12 @@ export default {
   ssl: 'SSL证书',
   users: '用户管理',
   audit: '审计日志',
-  settings: '系统设置'
+  sessions: '会话与 API Key',
+  settings: '系统设置',
+  deploy: '部署',
+  daemon: '进程守护',
+  probe: '拨测',
+  protection: '防护',
+  nodes: '多节点',
+  ai: 'AI 助手'
 }

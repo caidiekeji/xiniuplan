@@ -31,7 +31,7 @@ func (s *RedisService) getRedisInstance(instanceID uint) (*model.DatabaseInstanc
 		return nil, fmt.Errorf("实例不存在: %d", instanceID)
 	}
 	if instance.Type != "redis" {
-		return nil, fmt.Errorf("实例类型 %s 不是 Redis", instance.Type)
+		return nil, NewUnsupportedTypeError(instance.Type, "该操作仅支持 Redis 实例")
 	}
 	return &instance, nil
 }

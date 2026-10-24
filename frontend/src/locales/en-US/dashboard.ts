@@ -15,6 +15,8 @@ export default {
   downloadUpload: 'Download / Upload',
   resourceTrend: 'Resource Trend',
   resourceTrendSubtitle: 'Real-time CPU and memory usage monitoring',
+  chartAria: 'Resource trend chart: CPU {cpu}%, memory {mem}% (range {range})',
+  chartAriaEmpty: 'Resource trend chart: no data',
   cpuMemoryUsage: 'CPU & Memory Usage',
   recentOperations: 'Recent Operations',
   recentOperationsSubtitle: 'Latest 5 audit records',

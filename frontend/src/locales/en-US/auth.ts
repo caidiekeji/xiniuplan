@@ -26,5 +26,16 @@ export default {
   uptimeLabel: 'Uptime',
   moduleLabel: 'Modules',
   versionLabel: 'Version',
-  systemNormal: 'System running normally · All services online'
+  systemNormal: 'System running normally · All services online',
+  forgot: {
+    link: 'Forgot password?',
+    title: 'Forgot Password',
+    tip: 'Enter your username and registered email, and the system will send a password reset link (SMTP must be configured in "System Settings" first).',
+    requiredFields: 'Please enter your username and registered email',
+    usernamePlaceholder: 'Username',
+    emailPlaceholder: 'Registered email',
+    send: 'Send Reset Link',
+    sentTip: 'If the username and email match, a reset link will be sent to that email (valid for 30 minutes). Check your inbox and reset your password.',
+    sendFailed: 'Failed to send, please try again later'
+  }
 }

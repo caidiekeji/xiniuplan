@@ -99,7 +99,8 @@ const (
 	PermBackupDelete = "backup:delete"
 
 	// 监控
-	PermMonitorView = "monitor:view"
+	PermMonitorView   = "monitor:view"
+	PermMonitorUpdate = "monitor:update"
 
 	// 用户管理
 	PermUserView   = "user:view"
@@ -153,7 +154,7 @@ var AllPermissions = []string{
 	PermAppStoreView, PermAppStoreInstall,
 	PermFirewallView, PermFirewallUpdate,
 	PermBackupView, PermBackupCreate, PermBackupDelete,
-	PermMonitorView,
+	PermMonitorView, PermMonitorUpdate,
 	PermUserView, PermUserCreate, PermUserUpdate, PermUserDelete,
 	PermAuditView,
 	PermSettingView, PermSettingUpdate,
@@ -236,7 +237,7 @@ func PermissionTree() []PermissionGroup {
 		},
 		{
 			Module: "monitor", Label: "监控",
-			Items: []PermissionItem{{PermMonitorView, "查看监控"}},
+			Items: []PermissionItem{{PermMonitorView, "查看监控"}, {PermMonitorUpdate, "进程管理"}},
 		},
 		{
 			Module: "user", Label: "用户管理",

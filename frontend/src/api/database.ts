@@ -234,11 +234,13 @@ export function getTables(id: number | string, dbName: string) {
   })
 }
 
-export function getTableStructure(id: number | string, dbName: string, tableName: string) {
-  return request<TableColumn[]>({
+export async function getTableStructure(id: number | string, dbName: string, tableName: string) {
+  // 后端返回 { columns, indexes }，页面按数组消费，这里统一取 columns
+  const res = await request<{ columns?: TableColumn[]; indexes?: unknown[] }>({
     url: `/databases/${id}/dbs/${encodeURIComponent(dbName)}/tables/${encodeURIComponent(tableName)}`,
     method: 'get'
   })
+  return { ...res, data: res.data?.columns || [] }
 }
 
 export function getTableData(

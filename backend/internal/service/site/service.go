@@ -58,28 +58,43 @@ func NewService(db *gorm.DB) *Service {
 
 // --- 路径辅助 ---
 
+// 站点相关目录（进程启动时由 ConfigureSitePaths 按 config.yaml 注入）。
+//
+// 原实现硬编码 /www 与 /opt/cloudpivot/runtime/...，这些路径在服务器上
+// 并不存在也不可写，「创建网站」必然失败（2026-10-23 闭环审计）。
+// 默认值是面板工作目录（backend/）下的相对路径，保证默认可写。
+var (
+	siteRootBaseDir  = "./runtime/www"
+	nginxConfBaseDir = "./runtime/nginx/conf.d"
+	sslCertBaseDir   = "./runtime/ssl"
+)
+
+// ConfigureSitePaths 注入站点目录配置（进程启动时调用一次）
+func ConfigureSitePaths(rootDir, confDir, sslDir string) {
+	if rootDir != "" {
+		siteRootBaseDir = rootDir
+	}
+	if confDir != "" {
+		nginxConfBaseDir = confDir
+	}
+	if sslDir != "" {
+		sslCertBaseDir = sslDir
+	}
+}
+
 // nginxConfDir Nginx 配置目录
 func nginxConfDir() string {
-	if runtime.GOOS == "windows" {
-		return "./runtime/nginx/conf.d"
-	}
-	return "/opt/cloudpivot/runtime/nginx/conf.d"
+	return nginxConfBaseDir
 }
 
 // siteRootDir 网站根目录
 func siteRootDir(domain string) string {
-	if runtime.GOOS == "windows" {
-		return filepath.Join("./runtime/www", domain)
-	}
-	return filepath.Join("/www", domain)
+	return filepath.Join(siteRootBaseDir, domain)
 }
 
 // sslCertDir SSL 证书目录
 func sslCertDir(domain string) string {
-	if runtime.GOOS == "windows" {
-		return filepath.Join("./runtime/ssl", domain)
-	}
-	return filepath.Join("/opt/cloudpivot/runtime/ssl", domain)
+	return filepath.Join(sslCertBaseDir, domain)
 }
 
 // nginxConfPath Nginx 配置文件路径
@@ -253,8 +268,18 @@ func (s *Service) GetSite(id uint) (*model.Site, error) {
 	return &site, nil
 }
 
-// ListSites 分页获取网站列表
-func (s *Service) ListSites(page, pageSize int) ([]model.Site, int64, error) {
+// SiteFilter 网站列表筛选条件（空值表示不过滤）
+type SiteFilter struct {
+	Domain string
+	Type   string
+	Status string
+}
+
+// ListSites 分页获取网站列表。
+//
+// 此前 domain/type/status 三个筛选参数前端一直在传，后端却只读 page/pageSize，
+// 导致三个筛选器全部无效（2026-10-23 闭环审计）。
+func (s *Service) ListSites(page, pageSize int, filter SiteFilter) ([]model.Site, int64, error) {
 	if page <= 0 {
 		page = 1
 	}
@@ -262,15 +287,28 @@ func (s *Service) ListSites(page, pageSize int) ([]model.Site, int64, error) {
 		pageSize = 10
 	}
 
+	q := s.db.Model(&model.Site{})
+	if d := strings.TrimSpace(filter.Domain); d != "" {
+		// 主域名或附加域名模糊匹配（附加域名为 JSON 数组存储，用 LIKE 覆盖）
+		like := "%" + d + "%"
+		q = q.Where("primary_domain LIKE ? OR domains LIKE ?", like, like)
+	}
+	if t := strings.TrimSpace(filter.Type); t != "" {
+		q = q.Where("type = ?", t)
+	}
+	if st := strings.TrimSpace(filter.Status); st != "" {
+		q = q.Where("status = ?", st)
+	}
+
 	sites := make([]model.Site, 0)
 	var total int64
 
-	if err := s.db.Model(&model.Site{}).Count(&total).Error; err != nil {
+	if err := q.Count(&total).Error; err != nil {
 		return nil, 0, fmt.Errorf("count sites: %w", err)
 	}
 
 	offset := (page - 1) * pageSize
-	if err := s.db.Order("created_at DESC").Offset(offset).Limit(pageSize).Find(&sites).Error; err != nil {
+	if err := q.Order("created_at DESC").Offset(offset).Limit(pageSize).Find(&sites).Error; err != nil {
 		return nil, 0, fmt.Errorf("query sites: %w", err)
 	}
 
@@ -332,6 +370,21 @@ func (s *Service) UpdateSite(id uint, req dto.UpdateSiteRequest) (*model.Site, e
 		site.RootDir = *req.RootDir
 	}
 
+	// WAF 基础版（roadmap #10）：CC 限速 + UA 黑名单
+	wafChanged := false
+	if req.WafEnabled != nil && *req.WafEnabled != site.WafEnabled {
+		site.WafEnabled = *req.WafEnabled
+		wafChanged = true
+	}
+	if req.CCRpm != nil && *req.CCRpm > 0 && *req.CCRpm != site.CCRpm {
+		site.CCRpm = *req.CCRpm
+		wafChanged = true
+	}
+	if req.UABlacklist != nil && *req.UABlacklist != site.UABlacklist {
+		site.UABlacklist = *req.UABlacklist
+		wafChanged = true
+	}
+
 	// 更新 Nginx 配置路径（域名可能变了）
 	site.NginxConf = nginxConfPath(site.PrimaryDomain)
 
@@ -350,6 +403,13 @@ func (s *Service) UpdateSite(id uint, req dto.UpdateSiteRequest) (*model.Site, e
 	// 保存到数据库
 	if err := s.db.Save(site).Error; err != nil {
 		return nil, fmt.Errorf("update site in db: %w", err)
+	}
+
+	// WAF zone 定义位于 http 上下文，必须先同步 zone 文件再 reload
+	if wafChanged {
+		if err := s.SyncWAFZones(); err != nil {
+			fmt.Printf("[site-service] sync waf zones failed: %v\n", err)
+		}
 	}
 
 	// 重载 Nginx
@@ -387,6 +447,13 @@ func (s *Service) DeleteSite(id uint, deleteFiles bool) error {
 	// 删除数据库记录
 	if err := s.db.Delete(site).Error; err != nil {
 		return fmt.Errorf("delete site from db: %w", err)
+	}
+
+	// 站点开启过 WAF：同步移除其 zone 定义
+	if site.WafEnabled {
+		if err := s.SyncWAFZones(); err != nil {
+			fmt.Printf("[site-service] sync waf zones after delete failed: %v\n", err)
+		}
 	}
 
 	// 重载 Nginx
@@ -494,6 +561,10 @@ func (s *Service) GetNginxConfig(id uint) (string, error) {
 
 // UpdateNginxConfig 更新 Nginx 配置
 func (s *Service) UpdateNginxConfig(id uint, content string) error {
+	// 安全校验：整段配置也会被 reload 加载，同样禁止危险指令
+	if err := ValidateNginxContent(content); err != nil {
+		return fmt.Errorf("nginx 配置校验失败: %w", err)
+	}
 	site, err := s.GetSite(id)
 	if err != nil {
 		return err
@@ -588,6 +659,9 @@ func ToResponse(site *model.Site) dto.SiteResponse {
 		Status:        site.Status,
 		ContainerID:   site.ContainerID,
 		Remark:        site.Remark,
+		WafEnabled:    site.WafEnabled,
+		CCRpm:         site.CCRpm,
+		UABlacklist:   site.UABlacklist,
 		CreatedAt:     site.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:     site.UpdatedAt.Format(time.RFC3339),
 		SSL: dto.SiteSSLInfo{
@@ -605,4 +679,23 @@ func ToResponse(site *model.Site) dto.SiteResponse {
 	}
 
 	return resp
+}
+
+// SyncWAFZones 同步 WAF zone 定义文件（站点 WAF 配置变化后调用）
+func (s *Service) SyncWAFZones() error {
+	sites := make([]model.Site, 0)
+	if err := s.db.Find(&sites).Error; err != nil {
+		return err
+	}
+	content, needed := nginx.GenerateWAFZones(sites)
+	dir := nginxConfDir()
+	wafFile := dir + "/00-waf-zones.conf"
+	if !needed {
+		// 无站点开启 WAF：移除 zone 文件
+		if _, err := os.Stat(wafFile); err == nil {
+			_ = os.Remove(wafFile)
+		}
+		return nil
+	}
+	return os.WriteFile(wafFile, []byte(content), 0644)
 }

@@ -14,8 +14,8 @@ func SecurityHeaders() gin.HandlerFunc {
 		c.Header("X-Frame-Options", "DENY")
 		// 限制 Referer 信息泄露
 		c.Header("Referrer-Policy", "strict-origin-when-cross-origin")
-		// 基础 CSP（允许同源脚本和样式，禁止 inline 脚本）
-		c.Header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws: wss:; frame-ancestors 'none'")
+		// 基础 CSP（允许同源脚本和样式，unsafe-eval 用于 ECharts 等库）
+		c.Header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws: wss:; frame-ancestors 'none'")
 		// 禁止浏览器缓存敏感页面（API 响应）
 		c.Header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
 		c.Header("Pragma", "no-cache")

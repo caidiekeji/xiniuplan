@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"strings"
+	"time"
 
 	"cloudpivot/internal/common"
 
@@ -33,6 +34,12 @@ var passwordChangeExemptPaths = map[string]bool{
 // （WebSocket 握手无法携带自定义请求头，终端等 WS 路由依赖此回退）
 func JWTAuth(verifyKey interface{}) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// API Key 认证通道（程序化调用，U-007）：有效则直接放行
+		if c.GetHeader("X-API-Key") != "" {
+			if APIKeyAuth(c) {
+				return
+			}
+		}
 		var tokenStr string
 		if authHeader := c.GetHeader("Authorization"); authHeader != "" {
 			parts := strings.SplitN(authHeader, " ", 2)
@@ -103,6 +110,21 @@ func JWTAuth(verifyKey interface{}) gin.HandlerFunc {
 				}
 			}
 			c.Set(string(PermissionsKey), perms)
+		}
+
+		// 登记在线会话（U-006 会话管理）
+		if uid, ok := c.Get(string(UserIDKey)); ok {
+			if userID, ok := uid.(uint); ok && userID > 0 {
+				exp := time.Now().Add(2 * time.Hour)
+				if expRaw, ok := claims["exp"].(float64); ok && expRaw > 0 {
+					exp = time.Unix(int64(expRaw), 0)
+				}
+				tokenType := "access"
+				if t, ok := claims["type"].(string); ok && t != "" {
+					tokenType = t
+				}
+				RegisterSession(c, tokenStr, userID, GetUsername(c), tokenType, exp)
+			}
 		}
 
 		c.Next()

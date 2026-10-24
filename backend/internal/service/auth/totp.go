@@ -6,6 +6,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"cloudpivot/internal/model"
@@ -135,7 +137,15 @@ func (s *Service) LoginWithTOTP(userID uint, code string) (*LoginResult, error) 
 
 // generateTokens 生成 access + refresh token
 func (s *Service) generateTokens(user model.User) (*LoginResult, error) {
-	accessToken, err := s.generateToken(user, s.accessTTL, "access")
+	accessTTL := s.accessTTL
+	// 会话超时（系统设置 → 面板设置，单位分钟）以设置表为准，缺省才用
+	// config.yaml 的 jwt.access_token_ttl。此前该设置项后端零引用，
+	// 界面上保存成功却对 token 有效期毫无影响（2026-10-23 闭环审计）
+	if mins, ok := s.sessionTimeoutMinutes(); ok {
+		accessTTL = time.Duration(mins) * time.Minute
+	}
+
+	accessToken, err := s.generateToken(user, accessTTL, "access")
 	if err != nil {
 		return nil, err
 	}
@@ -146,7 +156,24 @@ func (s *Service) generateTokens(user model.User) (*LoginResult, error) {
 	return &LoginResult{
 		AccessToken:           accessToken,
 		RefreshToken:          refreshToken,
-		ExpiresIn:             int(s.accessTTL.Seconds()),
+		ExpiresIn:             int(accessTTL.Seconds()),
 		RequirePasswordChange: user.MustChangePassword,
 	}, nil
+}
+
+// sessionTimeoutMinutes 读取设置表中的会话超时（分钟）。
+// 取不到或非法时返回 false，由调用方回退到配置文件默认值。
+func (s *Service) sessionTimeoutMinutes() (int, bool) {
+	if s.db == nil {
+		return 0, false
+	}
+	var setting model.Setting
+	if err := s.db.Where("`key` = ?", "session_timeout").First(&setting).Error; err != nil {
+		return 0, false
+	}
+	mins, err := strconv.Atoi(strings.TrimSpace(setting.Value))
+	if err != nil || mins <= 0 {
+		return 0, false
+	}
+	return mins, true
 }

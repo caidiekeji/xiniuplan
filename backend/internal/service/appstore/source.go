@@ -303,6 +303,15 @@ func (s *SourceService) FindApp(key string) (*appDefinition, *model.AppSource, e
 	return nil, nil, fmt.Errorf("应用不存在: %s", key)
 }
 
+// FindAppDir 在所有启用源中查找应用目录（升级流程用）
+func (s *SourceService) FindAppDir(key string) (string, error) {
+	_, source, err := s.FindApp(key)
+	if err != nil {
+		return "", err
+	}
+	return s.GetAppDir(source.ID, key)
+}
+
 // getSourceApps 获取某个源的应用列表（优先读缓存，官方/私有源支持懒加载）
 func (s *SourceService) getSourceApps(source model.AppSource) []appDefinition {
 	s.mu.RLock()

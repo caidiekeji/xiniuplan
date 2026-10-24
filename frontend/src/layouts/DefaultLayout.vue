@@ -2,26 +2,17 @@
 import { computed, h, ref, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import {
-  NLayout, NLayoutSider, NLayoutHeader, NLayoutContent,
-  NMenu, NIcon, NButton, NDropdown, NAvatar, NSpace,
-  NBadge, NDivider
-} from 'naive-ui'
-import {
-  GridOutline, GlobeOutline, ServerOutline,
-  CubeOutline, StorefrontOutline, FolderOpenOutline,
-  TerminalOutline, AnalyticsOutline, SaveOutline,
-  ShieldHalfOutline, KeyOutline, FileTrayFullOutline,
-  SettingsOutline, SunnyOutline, MoonOutline,
-  MenuOutline, NotificationsOutline, LogOutOutline,
-  PersonOutline, ChevronBackOutline, ChevronForwardOutline,
-  TimeOutline, LockClosedOutline, AlertCircleOutline, PeopleOutline,
-  LanguageOutline, ExtensionPuzzleOutline
-} from '@vicons/ionicons5'
+import { NLayout, NLayoutSider, NMenu, NIcon, NButton, NDropdown, NAvatar, NBadge, NDivider } from 'naive-ui'
+import { StorefrontOutline, FolderOpenOutline, FileTrayFullOutline, SettingsOutline, SunnyOutline, MoonOutline, MenuOutline, NotificationsOutline, LogOutOutline, PersonOutline, ChevronBackOutline, LockClosedOutline, AlertCircleOutline, PeopleOutline, LanguageOutline, ExtensionPuzzleOutline, PulseOutline, GitBranchOutline, ShieldCheckmarkOutline, HardwareChipOutline, LayersOutline, SparklesOutline, SearchOutline } from '@vicons/ionicons5'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
 import { LOCALES, type Locale } from '@/locales'
 import RhinoLogo from '@/components/RhinoLogo.vue'
+import CommandPalette, { type CommandItem } from '@/components/CommandPalette.vue'
+import {
+  RackIcon, GlobeIcon, DbIcon, CubeIcon, TerminalIcon,
+  GaugeIcon, TapeIcon, FirewallIcon, CertIcon, CronIcon
+} from '@/components/PanelIcons'
 import { getAlertHistory } from '@/api/alert'
 
 const { t } = useI18n()
@@ -65,29 +56,96 @@ function toggleMobileDrawer() {
   mobileDrawerOpen.value = !mobileDrawerOpen.value
 }
 
+// 侧栏 24 项按语义分 5 组（审计 P1-03：平铺导航无分组，找功能靠扫读）
+// 组内顺序即菜单顺序；新增菜单项时归入对应组，组内 ≤6 项，超过则考虑再拆组
 const menuOptions = computed(() => [
-  { label: t('menu.dashboard'), key: '/dashboard', icon: renderIcon(GridOutline) },
-  { label: t('menu.website'), key: '/website', icon: renderIcon(GlobeOutline) },
-  { label: t('menu.database'), key: '/database', icon: renderIcon(ServerOutline) },
-  { label: t('menu.container'), key: '/container', icon: renderIcon(CubeOutline) },
-  { label: t('menu.appstore'), key: '/appstore', icon: renderIcon(StorefrontOutline) },
-  { label: t('menu.plugins'), key: '/plugins', icon: renderIcon(ExtensionPuzzleOutline) },
-  { label: t('menu.file'), key: '/file', icon: renderIcon(FolderOpenOutline) },
-  { label: t('menu.terminal'), key: '/terminal', icon: renderIcon(TerminalOutline) },
-  { label: t('menu.cron'), key: '/cron', icon: renderIcon(TimeOutline) },
-  { label: t('menu.monitor'), key: '/monitor', icon: renderIcon(AnalyticsOutline) },
-  { label: t('menu.backup'), key: '/backup', icon: renderIcon(SaveOutline) },
-  { label: t('menu.firewall'), key: '/firewall', icon: renderIcon(ShieldHalfOutline) },
-  { label: t('menu.ssh'), key: '/ssh', icon: renderIcon(LockClosedOutline) },
-  { label: t('menu.alert'), key: '/alert', icon: renderIcon(AlertCircleOutline) },
-  { label: t('menu.ssl'), key: '/ssl', icon: renderIcon(KeyOutline) },
-  { label: t('menu.users'), key: '/users', icon: renderIcon(PeopleOutline) },
-  { label: t('menu.audit'), key: '/audit', icon: renderIcon(FileTrayFullOutline) },
-  { label: t('menu.settings'), key: '/settings', icon: renderIcon(SettingsOutline) }
+  {
+    type: 'group' as const,
+    label: t('menu.groups.overview'),
+    key: 'group-overview',
+    children: [
+      { label: t('menu.dashboard'), key: '/dashboard', icon: renderIcon(RackIcon) },
+      { label: t('menu.monitor'), key: '/monitor', icon: renderIcon(GaugeIcon) },
+      { label: t('menu.probe'), key: '/probe', icon: renderIcon(PulseOutline) }
+    ]
+  },
+  {
+    type: 'group' as const,
+    label: t('menu.groups.apps'),
+    key: 'group-apps',
+    children: [
+      { label: t('menu.website'), key: '/website', icon: renderIcon(GlobeIcon) },
+      { label: t('menu.deploy'), key: '/deploy', icon: renderIcon(GitBranchOutline) },
+      { label: t('menu.database'), key: '/database', icon: renderIcon(DbIcon) },
+      { label: t('menu.container'), key: '/container', icon: renderIcon(CubeIcon) },
+      { label: t('menu.appstore'), key: '/appstore', icon: renderIcon(StorefrontOutline) },
+      { label: t('menu.plugins'), key: '/plugins', icon: renderIcon(ExtensionPuzzleOutline) }
+    ]
+  },
+  {
+    type: 'group' as const,
+    label: t('menu.groups.ops'),
+    key: 'group-ops',
+    children: [
+      { label: t('menu.file'), key: '/file', icon: renderIcon(FolderOpenOutline) },
+      { label: t('menu.terminal'), key: '/terminal', icon: renderIcon(TerminalIcon) },
+      { label: t('menu.cron'), key: '/cron', icon: renderIcon(CronIcon) },
+      { label: t('menu.daemon'), key: '/daemon', icon: renderIcon(HardwareChipOutline) },
+      { label: t('menu.backup'), key: '/backup', icon: renderIcon(TapeIcon) }
+    ]
+  },
+  {
+    type: 'group' as const,
+    label: t('menu.groups.security'),
+    key: 'group-security',
+    children: [
+      { label: t('menu.firewall'), key: '/firewall', icon: renderIcon(FirewallIcon) },
+      { label: t('menu.protection'), key: '/protection', icon: renderIcon(ShieldCheckmarkOutline) },
+      { label: t('menu.ssh'), key: '/ssh', icon: renderIcon(LockClosedOutline) },
+      { label: t('menu.alert'), key: '/alert', icon: renderIcon(AlertCircleOutline) },
+      { label: t('menu.ssl'), key: '/ssl', icon: renderIcon(CertIcon) }
+    ]
+  },
+  {
+    type: 'group' as const,
+    label: t('menu.groups.system'),
+    key: 'group-system',
+    children: [
+      { label: t('menu.users'), key: '/users', icon: renderIcon(PeopleOutline) },
+      { label: t('menu.audit'), key: '/audit', icon: renderIcon(FileTrayFullOutline) },
+      { label: t('menu.nodes'), key: '/nodes', icon: renderIcon(LayersOutline) },
+      { label: t('menu.ai'), key: '/ai', icon: renderIcon(SparklesOutline) },
+      { label: t('menu.settings'), key: '/settings', icon: renderIcon(SettingsOutline) }
+    ]
+  }
 ])
 
 function renderIcon(icon: any) {
   return () => h(NIcon, null, { default: () => h(icon) })
+}
+
+// 命令面板条目：菜单项与分组同源展开，保证侧栏改分组时面板自动同步
+const paletteItems = computed<CommandItem[]>(() => {
+  const items: CommandItem[] = []
+  menuOptions.value.forEach((group: any) => {
+    const groupLabel = group.label as string
+    ;(group.children || []).forEach((child: any) => {
+      items.push({ key: child.key, label: child.label, icon: child.icon, group: groupLabel })
+    })
+  })
+  // 动作类命令：非路由，key 以 action: 前缀区分
+  items.push(
+    { key: 'action:theme', label: appStore.theme === 'dark' ? t('common.toggleLight') : t('common.toggleDark'), icon: renderIcon(appStore.theme === 'dark' ? SunnyOutline : MoonOutline) }
+  )
+  return items
+})
+
+function handlePaletteSelect(key: string) {
+  if (key === 'action:theme') {
+    appStore.toggleTheme()
+    return
+  }
+  router.push(key)
 }
 
 function handleMenuSelect(key: string) {
@@ -141,6 +199,9 @@ const breadcrumb = computed(() => {
 /* ==================== 消息提醒 ==================== */
 const notificationCount = ref(0)
 
+/* ==================== 命令面板 ==================== */
+const paletteOpen = ref(false)
+
 async function fetchNotificationCount() {
   try {
     const res = await getAlertHistory({ status: 'triggered', page: 1, pageSize: 1 })
@@ -156,7 +217,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <NLayout has-sider style="height: 100vh" :native-scrollbar="false">
+  <NLayout has-sider style="height: 100vh; overflow: hidden" :native-scrollbar="true">
     <!-- 移动端遮罩层 -->
     <div
       v-if="isMobile && mobileDrawerOpen"
@@ -188,21 +249,23 @@ onMounted(() => {
         </NButton>
       </div>
 
-      <NMenu
-        :value="activeKey"
-        :options="menuOptions"
-        :collapsed="collapsed"
-        :collapsed-width="60"
-        :collapsed-icon-size="20"
-        @update:value="handleMenuSelect"
-        class="sider-menu"
-      />
+      <nav class="sider-nav" :aria-label="t('menu.navLabel')">
+        <NMenu
+          :value="activeKey"
+          :options="menuOptions"
+          :collapsed="collapsed"
+          :collapsed-width="60"
+          :collapsed-icon-size="20"
+          @update:value="handleMenuSelect"
+          class="sider-menu"
+        />
+      </nav>
     </NLayoutSider>
 
-    <!-- 主区域 -->
-    <NLayout>
-      <!-- 顶栏 -->
-      <NLayoutHeader bordered class="layout-header">
+    <!-- 主区域：显式锁高 + 禁外层滚动，保证侧栏永不随内容滚动 -->
+    <NLayout style="height: 100vh; overflow: hidden">
+      <!-- 顶栏（语义 landmark：header，D22） -->
+      <header class="layout-header">
         <div class="header-left">
           <NButton
             quaternary
@@ -223,6 +286,20 @@ onMounted(() => {
         </div>
 
         <div class="header-right">
+          <!-- 命令面板入口（Cmd/Ctrl+K），桌面端显示 -->
+          <NButton
+            quaternary
+            size="small"
+            class="header-cmd-btn"
+            :title="t('common.commandPalette')"
+            @click="() => paletteOpen = true"
+          >
+            <template #icon>
+              <NIcon><SearchOutline /></NIcon>
+            </template>
+            <span class="header-cmd__kbd">Ctrl K</span>
+          </NButton>
+
           <!-- 语言切换 -->
           <NDropdown
             :options="languageOptions"
@@ -262,13 +339,21 @@ onMounted(() => {
             </div>
           </NDropdown>
         </div>
-      </NLayoutHeader>
+      </header>
 
-      <!-- 内容区 -->
-      <NLayoutContent class="layout-content">
+      <!-- 内容区（语义 landmark：main；每页由布局统一注入 h1 = 当前面包屑末级标题，D22） -->
+      <main class="layout-content">
+        <h1 class="sr-only">{{ breadcrumb[breadcrumb.length - 1] || t('auth.brandName') }}</h1>
         <router-view />
-      </NLayoutContent>
+      </main>
     </NLayout>
+
+    <!-- 命令面板（Ctrl/Cmd+K 或顶栏入口唤起） -->
+    <CommandPalette
+      v-model:show="paletteOpen"
+      :items="paletteItems"
+      @select="handlePaletteSelect"
+    />
   </NLayout>
 </template>
 
@@ -323,10 +408,34 @@ onMounted(() => {
   margin-left: auto;
 }
 
+.sider-nav {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
 .sider-menu {
   flex: 1;
   background: transparent;
   padding: var(--space-2) 0;
+}
+
+/* 分组标签：小字 + 弱化色，折叠时隐藏 */
+.sider-menu :deep(.n-menu-group-label) {
+  font-size: var(--fs-caption);
+  font-weight: 500;
+  color: var(--text-quaternary);
+  letter-spacing: 0.02em;
+}
+
+.sider-menu :deep(.n-menu-group-label > .n-menu-group-label__icon) {
+  display: none;
+}
+
+/* 折叠态：60px 宽容不下分组文字，整条隐藏，仅靠间距区隔 */
+.sider-menu.n-menu--collapsed :deep(.n-menu-group-label) {
+  display: none;
 }
 
 .sider-menu :deep(.n-menu-item) {
@@ -399,7 +508,7 @@ onMounted(() => {
 }
 
 .breadcrumb-sep {
-  color: var(--faint);
+  color: var(--text-quaternary);
   margin-right: var(--space-2);
 }
 
@@ -412,6 +521,23 @@ onMounted(() => {
 .header-lang-btn {
   padding-left: var(--space-2);
   padding-right: var(--space-3);
+}
+
+.header-cmd-btn {
+  padding-left: var(--space-2);
+  padding-right: var(--space-2);
+  color: var(--text-quaternary);
+  gap: var(--space-2);
+}
+
+.header-cmd__kbd {
+  font-family: var(--font-mono);
+  font-size: var(--fs-caption);
+  background: var(--surface2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 0 var(--space-1);
+  line-height: 1.6;
 }
 
 .header-lang__label {
@@ -455,6 +581,11 @@ onMounted(() => {
 }
 
 @media (max-width: 768px) {
+  .layout-header {
+    /* 刘海/挖孔屏竖屏避让（viewport-fit=cover 后生效，D20） */
+    height: calc(var(--header-height) + env(safe-area-inset-top, 0px));
+    padding-top: env(safe-area-inset-top, 0px);
+  }
   .header-collapse-btn {
     display: inline-flex;
   }
@@ -463,6 +594,8 @@ onMounted(() => {
   }
   .layout-content {
     padding: var(--space-3);
+    /* 全面屏底部横条避让：保证滚动到底后最后一行操作不被遮挡（D20） */
+    padding-bottom: calc(var(--space-3) + env(safe-area-inset-bottom, 0px));
   }
   .header-lang__label {
     display: none;
@@ -473,6 +606,10 @@ onMounted(() => {
   .header-right {
     gap: var(--space-1);
   }
+  /* 触屏无键盘，命令面板入口不展示（Ctrl+K 仍可用外接键盘） */
+  .header-cmd-btn {
+    display: none;
+  }
 }
 
 /* 移动端抽屉侧边栏 */
@@ -480,7 +617,7 @@ onMounted(() => {
   position: fixed;
   inset: 0;
   background: var(--overlay);
-  z-index: 999;
+  z-index: var(--z-drawer);
   animation: fadeIn var(--t-fast) var(--ease);
 }
 
@@ -489,7 +626,7 @@ onMounted(() => {
   left: 0;
   top: 0;
   bottom: 0;
-  z-index: 1000;
+  z-index: var(--z-modal);
   transform: translateX(-100%);
   transition: transform var(--t-normal) var(--ease);
   box-shadow: var(--shadow-lg);

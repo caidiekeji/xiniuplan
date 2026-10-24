@@ -57,12 +57,12 @@ func (h *PostgresHandler) ListDatabases(c *gin.Context) {
 	}
 	engine, err := h.pgSvc.GetEngine(id)
 	if err != nil {
-		common.Fail(c, common.CodeServerError, err.Error())
+		failDatabaseError(c, err)
 		return
 	}
 	dbs, err := engine.ListDatabases()
 	if err != nil {
-		common.Fail(c, common.CodeServerError, err.Error())
+		failDatabaseError(c, err)
 		return
 	}
 	common.Success(c, dbs)
@@ -81,11 +81,11 @@ func (h *PostgresHandler) CreateDatabase(c *gin.Context) {
 	}
 	engine, err := h.pgSvc.GetEngine(id)
 	if err != nil {
-		common.Fail(c, common.CodeServerError, err.Error())
+		failDatabaseError(c, err)
 		return
 	}
 	if err := engine.CreateDatabaseEx(req.Name, req.Encoding, req.Locale, req.Owner); err != nil {
-		common.Fail(c, common.CodeServerError, err.Error())
+		failDatabaseError(c, err)
 		return
 	}
 	common.Success(c, nil)
@@ -100,11 +100,11 @@ func (h *PostgresHandler) DropDatabase(c *gin.Context) {
 	name := c.Param("name")
 	engine, err := h.pgSvc.GetEngine(id)
 	if err != nil {
-		common.Fail(c, common.CodeServerError, err.Error())
+		failDatabaseError(c, err)
 		return
 	}
 	if err := engine.DropDatabase(name); err != nil {
-		common.Fail(c, common.CodeServerError, err.Error())
+		failDatabaseError(c, err)
 		return
 	}
 	common.Success(c, nil)
@@ -121,12 +121,12 @@ func (h *PostgresHandler) ListTables(c *gin.Context) {
 	dbName := c.Param("db")
 	engine, err := h.pgSvc.GetEngine(id)
 	if err != nil {
-		common.Fail(c, common.CodeServerError, err.Error())
+		failDatabaseError(c, err)
 		return
 	}
 	tables, err := engine.ListTablesEx(dbName)
 	if err != nil {
-		common.Fail(c, common.CodeServerError, err.Error())
+		failDatabaseError(c, err)
 		return
 	}
 	common.Success(c, tables)
@@ -142,12 +142,12 @@ func (h *PostgresHandler) GetTableSchema(c *gin.Context) {
 	tableName := c.Param("table")
 	engine, err := h.pgSvc.GetEngine(id)
 	if err != nil {
-		common.Fail(c, common.CodeServerError, err.Error())
+		failDatabaseError(c, err)
 		return
 	}
 	schema, err := engine.GetTableSchema(dbName, tableName)
 	if err != nil {
-		common.Fail(c, common.CodeServerError, err.Error())
+		failDatabaseError(c, err)
 		return
 	}
 	common.Success(c, schema)
@@ -165,12 +165,12 @@ func (h *PostgresHandler) QueryTableData(c *gin.Context) {
 
 	engine, err := h.pgSvc.GetEngine(id)
 	if err != nil {
-		common.Fail(c, common.CodeServerError, err.Error())
+		failDatabaseError(c, err)
 		return
 	}
 	result, err := engine.QueryTableData(dbName, tableName, page, pageSize)
 	if err != nil {
-		common.Fail(c, common.CodeServerError, err.Error())
+		failDatabaseError(c, err)
 		return
 	}
 	common.Success(c, result)
@@ -191,12 +191,12 @@ func (h *PostgresHandler) ExecuteSQL(c *gin.Context) {
 	}
 	engine, err := h.pgSvc.GetEngine(id)
 	if err != nil {
-		common.Fail(c, common.CodeServerError, err.Error())
+		failDatabaseError(c, err)
 		return
 	}
 	result, err := engine.ExecuteSQL(req.DBName, req.SQL, req.AllowDestructive)
 	if err != nil {
-		common.Fail(c, common.CodeServerError, err.Error())
+		failDatabaseError(c, err)
 		return
 	}
 	common.Success(c, result)
@@ -212,12 +212,12 @@ func (h *PostgresHandler) ListUsers(c *gin.Context) {
 	}
 	engine, err := h.pgSvc.GetEngine(id)
 	if err != nil {
-		common.Fail(c, common.CodeServerError, err.Error())
+		failDatabaseError(c, err)
 		return
 	}
 	users, err := engine.ListUsersEx()
 	if err != nil {
-		common.Fail(c, common.CodeServerError, err.Error())
+		failDatabaseError(c, err)
 		return
 	}
 	common.Success(c, users)
@@ -238,11 +238,11 @@ func (h *PostgresHandler) CreateUser(c *gin.Context) {
 	req.Login = true
 	engine, err := h.pgSvc.GetEngine(id)
 	if err != nil {
-		common.Fail(c, common.CodeServerError, err.Error())
+		failDatabaseError(c, err)
 		return
 	}
 	if err := engine.CreateUserEx(req); err != nil {
-		common.Fail(c, common.CodeServerError, err.Error())
+		failDatabaseError(c, err)
 		return
 	}
 	common.Success(c, nil)
@@ -257,11 +257,11 @@ func (h *PostgresHandler) DropUser(c *gin.Context) {
 	name := c.Param("name")
 	engine, err := h.pgSvc.GetEngine(id)
 	if err != nil {
-		common.Fail(c, common.CodeServerError, err.Error())
+		failDatabaseError(c, err)
 		return
 	}
 	if err := engine.DropUser(name, ""); err != nil {
-		common.Fail(c, common.CodeServerError, err.Error())
+		failDatabaseError(c, err)
 		return
 	}
 	common.Success(c, nil)
@@ -279,18 +279,21 @@ func (h *PostgresHandler) GrantPrivileges(c *gin.Context) {
 		common.Fail(c, common.CodeParamError, "参数错误: "+err.Error())
 		return
 	}
-	dbName := c.Query("db_name")
+	dbName := req.DBName
+	if dbName == "" {
+		dbName = c.Query("db_name")
+	}
 	if dbName == "" {
 		common.Fail(c, common.CodeParamError, "缺少 db_name 查询参数")
 		return
 	}
 	engine, err := h.pgSvc.GetEngine(id)
 	if err != nil {
-		common.Fail(c, common.CodeServerError, err.Error())
+		failDatabaseError(c, err)
 		return
 	}
 	if err := engine.GrantPrivileges(username, "", dbName, req.Privileges); err != nil {
-		common.Fail(c, common.CodeServerError, err.Error())
+		failDatabaseError(c, err)
 		return
 	}
 	common.Success(c, nil)
@@ -310,11 +313,11 @@ func (h *PostgresHandler) RevokePrivileges(c *gin.Context) {
 	}
 	engine, err := h.pgSvc.GetEngine(id)
 	if err != nil {
-		common.Fail(c, common.CodeServerError, err.Error())
+		failDatabaseError(c, err)
 		return
 	}
 	if err := engine.RevokePrivileges(username, "", dbName); err != nil {
-		common.Fail(c, common.CodeServerError, err.Error())
+		failDatabaseError(c, err)
 		return
 	}
 	common.Success(c, nil)

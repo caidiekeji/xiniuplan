@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { NIcon, NSkeleton } from 'naive-ui'
+import { NSkeleton } from 'naive-ui'
 
 const props = withDefaults(
   defineProps<{
@@ -107,7 +107,7 @@ const trendPositive = computed(() => (props.trend ?? 0) >= 0)
 }
 
 .stat-card__value {
-  font-size: var(--fs-hero);
+  font-size: var(--fs-h1);
   font-weight: 700;
   line-height: 1.1;
   letter-spacing: -0.02em;
@@ -115,7 +115,7 @@ const trendPositive = computed(() => (props.trend ?? 0) >= 0)
 
 .stat-card__unit {
   font-size: var(--fs-caption);
-  color: var(--faint);
+  color: var(--text-quaternary);
 }
 
 .stat-card__bottom {
@@ -127,7 +127,7 @@ const trendPositive = computed(() => (props.trend ?? 0) >= 0)
 
 .stat-card__subtitle {
   font-size: var(--fs-caption);
-  color: var(--faint);
+  color: var(--text-quaternary);
 }
 
 .stat-card__trend {
@@ -145,7 +145,7 @@ const trendPositive = computed(() => (props.trend ?? 0) >= 0)
 }
 
 .stat-card__trend-label {
-  color: var(--faint);
+  color: var(--text-quaternary);
   margin-left: var(--space-1);
   font-weight: 400;
 }

@@ -15,6 +15,8 @@ export default {
   downloadUpload: 'ダウンロード / アップロード',
   resourceTrend: 'リソーストレンド',
   resourceTrendSubtitle: 'CPUとメモリ使用率のリアルタイム監視',
+  chartAria: 'リソーストレンドチャート：現在のCPU {cpu}%、メモリ {mem}%（範囲 {range}）',
+  chartAriaEmpty: 'リソーストレンドチャート：データなし',
   cpuMemoryUsage: 'CPUとメモリ使用率',
   recentOperations: '最近の操作',
   recentOperationsSubtitle: '最新5件の監査記録',

@@ -9,7 +9,6 @@ export default {
   operation: '操作',
   status: 'ステータス',
   loading: '読み込み中',
-  submit: '送信',
   reset: 'リセット',
   close: '閉じる',
   back: '戻る',
@@ -21,6 +20,10 @@ export default {
   operationSuccess: '操作が成功しました',
   operationFailed: '操作に失敗しました',
   noData: 'データがありません',
+  retry: '再試行',
+  commandPalette: 'コマンドパレット',
+  commandPlaceholder: 'ページまたはアクションを検索…',
+  noResults: '一致する結果がありません',
   all: 'すべて',
   actions: '操作',
   name: '名前',
@@ -38,5 +41,16 @@ export default {
   expand: 'メニューを展開',
   notifications: '通知',
   toggleLight: 'ライトモードに切替',
-  toggleDark: 'ダークモードに切替'
+  toggleDark: 'ダークモードに切替',
+  errorBoundary: {
+    title: 'ページのレンダリングエラー',
+    retry: '再試行'
+  },
+  errors: {
+    pageNotFound: 'ページが存在しないか、アクセスパスが無効です',
+    appError: 'アプリケーションエラー：{msg}',
+    requestFailed: 'リクエストに失敗しました',
+    networkError: 'ネットワークエラー',
+    buildRequestFailed: 'ビルドリクエストに失敗しました（HTTP {status}）'
+  }
 }

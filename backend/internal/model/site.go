@@ -22,8 +22,12 @@ type Site struct {
 	Status        string      `gorm:"size:16;default:running" json:"status"` // running | stopped | error
 	ContainerID   string      `gorm:"size:128" json:"container_id"`
 	Remark        string      `gorm:"size:512" json:"remark"`
-	CreatedAt     time.Time   `json:"created_at"`
-	UpdatedAt     time.Time   `json:"updated_at"`
+	// WAF（roadmap #10）
+	WafEnabled  bool      `gorm:"not null;default:false" json:"waf_enabled"`
+	CCRpm       int       `gorm:"not null;default:120" json:"cc_rpm"` // 每分钟请求上限
+	UABlacklist string    `gorm:"type:text" json:"ua_blacklist"`      // 每行一个 UA 关键词
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 func (Site) TableName() string { return "sites" }

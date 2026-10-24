@@ -14,6 +14,18 @@ type Config struct {
 	JWT      JWTConfig      `mapstructure:"jwt"`
 	Log      LogConfig      `mapstructure:"log"`
 	Monitor  MonitorConfig  `mapstructure:"monitor"`
+	Site     SiteConfig     `mapstructure:"site"`
+}
+
+// SiteConfig 网站管理相关目录
+//
+// 此前站点根目录/证书目录在代码里硬编码为 /www 与 /opt/cloudpivot/runtime/...，
+// 而这些路径在多数部署形态下并不存在也不可写，导致「创建网站」必然失败
+// （2026-10-23 闭环审计）。默认改为面板工作目录下的相对路径。
+type SiteConfig struct {
+	RootDir      string `mapstructure:"root_dir"`       // 站点根目录
+	NginxConfDir string `mapstructure:"nginx_conf_dir"` // nginx 站点配置目录
+	SSLDir       string `mapstructure:"ssl_dir"`        // SSL 证书目录
 }
 
 type ServerConfig struct {
@@ -65,6 +77,10 @@ func Load(path string) (*Config, error) {
 	v.SetDefault("jwt.refresh_token_ttl", 604800) // 7d
 	v.SetDefault("log.level", "info")
 	v.SetDefault("monitor.interval", 15)
+	// 站点目录：相对面板工作目录（backend/），保证默认可写
+	v.SetDefault("site.root_dir", "./runtime/www")
+	v.SetDefault("site.nginx_conf_dir", "./runtime/nginx/conf.d")
+	v.SetDefault("site.ssl_dir", "./runtime/ssl")
 
 	// 配置文件
 	if path != "" {

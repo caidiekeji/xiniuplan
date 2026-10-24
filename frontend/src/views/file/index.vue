@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, watch, h, onMounted, onBeforeUnmount } from 'vue'
-import { useMessage } from 'naive-ui'
+import { useMessage } from '@/composables/useMessage'
+import { useI18n } from 'vue-i18n'
 import {
   NInput, NButton, NSpace, NIcon, NTree, NFormItem, NSelect,
   NDrawer, NDrawerContent, NAlert, NProgress, NDropdown, NTag
@@ -12,14 +13,17 @@ import {
   CreateOutline, TrashOutline, CopyOutline, MoveOutline, EllipsisHorizontalOutline
 } from '@vicons/ionicons5'
 import { PageCard, DataTable, ModalForm, ConfirmDialog, CodeEditor } from '@/components'
+import { useQueryState } from '@/composables/useQueryState'
 import {
   listFiles, createDir, createFile, getFileContent, writeFileContent,
   renameFile, copyFile, moveFile, deleteFiles, compressFiles, decompressFile,
   searchFiles, uploadFile, downloadFileAs,
   type FileItem, type CompressFormat
 } from '@/api/file'
+import { listRecycle, restoreRecycle, purgeRecycle, type RecycleItem } from '@/api/features17'
 
 const message = useMessage()
+const { t } = useI18n()
 
 /* ==================== 移动端适配 ==================== */
 const showTree = ref(true)
@@ -54,10 +58,10 @@ function formatSize(bytes: number) {
   const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1)
   return (bytes / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1) + ' ' + units[i]
 }
-function formatTime(t: string) {
-  if (!t) return '-'
-  const d = new Date(t)
-  if (isNaN(d.getTime())) return t
+function formatTime(tk: string) {
+  if (!tk) return '-'
+  const d = new Date(tk)
+  if (isNaN(d.getTime())) return tk
   const pad = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
@@ -87,12 +91,13 @@ function detectLanguage(name: string) {
 }
 
 /* ==================== 状态 ==================== */
-const currentPath = ref('/')
+// 路径 / 搜索词 URL 化（D19）：目录深链可直达、刷新不丢位置
+const currentPath = useQueryState('path', '/')
 const files = ref<FileItem[]>([])
 const loading = ref(false)
 const checkedKeys = ref<(string | number)[]>([])
 
-const searchKeyword = ref('')
+const searchKeyword = useQueryState('kw', '')
 const searchResults = ref<any[]>([])
 const searching = ref(false)
 const inSearchMode = computed(() => searchKeyword.value.trim().length > 0)
@@ -168,7 +173,7 @@ async function loadList() {
     const res = await listFiles(currentPath.value)
     files.value = (res.data?.items || []).map((f) => ({ ...f, key: f.path }))
   } catch (e: any) {
-    message.error(e.message || '加载目录失败')
+    message.error(e.message || t('file.messages.loadDirFailed'))
     files.value = []
   } finally {
     loading.value = false
@@ -202,7 +207,7 @@ async function doSearch(kw: string) {
       ...i, key: i.path, mode: '-', extension: ''
     }))
   } catch (e: any) {
-    message.error(e.message || '搜索失败')
+    message.error(e.message || t('file.messages.searchFailed'))
   } finally {
     searching.value = false
   }
@@ -226,12 +231,12 @@ function renderName(row: FileItem) {
 }
 function renderActions(row: FileItem) {
   const options = [
-    { label: '移动', key: 'move' },
-    { label: '复制', key: 'copy' },
-    { label: '压缩', key: 'compress' }
+    { label: t('file.menus.move'), key: 'move' },
+    { label: t('file.menus.copy'), key: 'copy' },
+    { label: t('file.menus.compress'), key: 'compress' }
   ]
   if (!row.is_dir && isArchive(row.name)) {
-    options.push({ label: '解压到…', key: 'decompress' })
+    options.push({ label: t('file.menus.decompress'), key: 'decompress' })
   }
   function handleMore(key: string | number) {
     if (key === 'move') openMove([row.path])
@@ -240,34 +245,34 @@ function renderActions(row: FileItem) {
     else if (key === 'decompress') openDecompress(row)
   }
   return h(NSpace, { size: 2, align: 'center' }, () => [
-    h(NButton, { size: 'tiny', quaternary: true, title: '重命名', onClick: () => openRename(row) },
+    h(NButton, { size: 'tiny', quaternary: true, title: t('file.actions.rename'), onClick: () => openRename(row) },
       { default: () => h(NIcon, { size: 14 }, () => h(CreateOutline)) }),
-    h(NButton, { size: 'tiny', quaternary: true, title: '下载', onClick: () => handleDownload(row) },
+    h(NButton, { size: 'tiny', quaternary: true, title: t('file.actions.download'), onClick: () => handleDownload(row) },
       { default: () => h(NIcon, { size: 14 }, () => h(CloudDownloadOutline)) }),
-    h(NButton, { size: 'tiny', quaternary: true, title: '删除', onClick: () => openDelete([row]) },
+    h(NButton, { size: 'tiny', quaternary: true, title: t('file.actions.delete'), onClick: () => openDelete([row]) },
       { default: () => h(NIcon, { size: 14 }, () => h(TrashOutline)) }),
     h(NDropdown, { options, trigger: 'click', onSelect: handleMore },
-      { default: () => h(NButton, { size: 'tiny', quaternary: true, title: '更多' },
+      { default: () => h(NButton, { size: 'tiny', quaternary: true, title: t('file.actions.more') },
         { default: () => h(NIcon, { size: 14 }, () => h(EllipsisHorizontalOutline)) }) })
   ])
 }
-const columns: DataTableColumns = [
+const columns = computed<DataTableColumns>(() => [
   { type: 'selection', width: 40 },
-  { title: '名称', key: 'name', render: renderName as any },
+  { title: t('file.columns.name'), key: 'name', render: renderName as any },
   {
-    title: '大小', key: 'size', width: 110,
+    title: t('file.columns.size'), key: 'size', width: 110,
     render: (row: FileItem) => row.is_dir ? '—' : h('span', { class: 'mono' }, formatSize(row.size))
   },
   {
-    title: '权限', key: 'mode', width: 100,
+    title: t('file.columns.mode'), key: 'mode', width: 100,
     render: (row: FileItem) => h('span', { class: 'mono' }, row.mode || '-')
   },
   {
-    title: '修改时间', key: 'mod_time', width: 170,
+    title: t('file.columns.modTime'), key: 'mod_time', width: 170,
     render: (row: FileItem) => h('span', { class: 'mono' }, formatTime(row.mod_time))
   },
-  { title: '操作', key: 'actions', width: 200, render: renderActions as any }
-]
+  { title: t('file.columns.actions'), key: 'actions', width: 200, render: renderActions as any }
+])
 
 function handleRowDblclick(row: FileItem) {
   if (row.is_dir) {
@@ -275,7 +280,7 @@ function handleRowDblclick(row: FileItem) {
   } else if (isTextFile(row.name)) {
     openEditor(row)
   } else {
-    message.info('二进制文件请下载后查看')
+    message.info(t('file.messages.binaryDownload'))
   }
 }
 
@@ -286,13 +291,13 @@ function openMkdir() {
 }
 async function submitMkdir() {
   const name = dialog.form.dirName.trim()
-  if (!name) { message.warning('请输入文件夹名称'); return }
+  if (!name) { message.warning(t('file.messages.inputDirName')); return }
   try {
     await createDir(joinPath(currentPath.value, name))
-    message.success('文件夹已创建')
+    message.success(t('file.messages.dirCreated'))
     dialog.mkdir = false
     loadList()
-  } catch (e: any) { message.error(e.message || '创建失败') }
+  } catch (e: any) { message.error(e.message || t('file.messages.createFailed')) }
 }
 function openMkfile() {
   dialog.form.fileName = ''
@@ -301,13 +306,13 @@ function openMkfile() {
 }
 async function submitMkfile() {
   const name = dialog.form.fileName.trim()
-  if (!name) { message.warning('请输入文件名'); return }
+  if (!name) { message.warning(t('file.messages.inputFileName')); return }
   try {
     await createFile(joinPath(currentPath.value, name), dialog.form.fileContent)
-    message.success('文件已创建')
+    message.success(t('file.messages.fileCreated'))
     dialog.mkfile = false
     loadList()
-  } catch (e: any) { message.error(e.message || '创建失败') }
+  } catch (e: any) { message.error(e.message || t('file.messages.createFailed')) }
 }
 
 /* ==================== 重命名 / 移动 / 复制 ==================== */
@@ -319,14 +324,14 @@ function openRename(row: FileItem) {
 async function submitRename() {
   if (!dialog.target) return
   const name = dialog.form.renameNewName.trim()
-  if (!name) { message.warning('请输入新名称'); return }
+  if (!name) { message.warning(t('file.messages.inputNewName')); return }
   const newPath = joinPath(dirname(dialog.target.path), name)
   try {
     await renameFile(dialog.target.path, newPath)
-    message.success('重命名成功')
+    message.success(t('file.messages.renameSuccess'))
     dialog.rename = false
     loadList()
-  } catch (e: any) { message.error(e.message || '重命名失败') }
+  } catch (e: any) { message.error(e.message || t('file.messages.renameFailed')) }
 }
 function openMove(paths: string[]) {
   dialog.srcPaths = paths
@@ -337,11 +342,11 @@ async function submitMove() {
   const dstDir = normalizePath(dialog.form.targetPath)
   try {
     await Promise.all(dialog.srcPaths.map((src) => moveFile(src, joinPath(dstDir, basename(src)))))
-    message.success('移动成功')
+    message.success(t('file.messages.moveSuccess'))
     dialog.move = false
     checkedKeys.value = []
     loadList()
-  } catch (e: any) { message.error(e.message || '移动失败') }
+  } catch (e: any) { message.error(e.message || t('file.messages.moveFailed')) }
 }
 function openCopy(paths: string[]) {
   dialog.srcPaths = paths
@@ -352,11 +357,11 @@ async function submitCopy() {
   const dstDir = normalizePath(dialog.form.targetPath)
   try {
     await Promise.all(dialog.srcPaths.map((src) => copyFile(src, joinPath(dstDir, basename(src)))))
-    message.success('复制成功')
+    message.success(t('file.messages.copySuccess'))
     dialog.copy = false
     checkedKeys.value = []
     loadList()
-  } catch (e: any) { message.error(e.message || '复制失败') }
+  } catch (e: any) { message.error(e.message || t('file.messages.copyFailed')) }
 }
 
 /* ==================== 压缩 / 解压 ==================== */
@@ -368,14 +373,14 @@ function openCompress(paths: string[]) {
 }
 async function submitCompress() {
   const dest = dialog.form.compressDest.trim()
-  if (!dest) { message.warning('请输入目标路径'); return }
+  if (!dest) { message.warning(t('file.messages.inputTargetPath')); return }
   try {
     await compressFiles(dialog.srcPaths, dest, dialog.form.compressFormat)
-    message.success('压缩任务已提交')
+    message.success(t('file.messages.compressSuccess'))
     dialog.compress = false
     checkedKeys.value = []
     loadList()
-  } catch (e: any) { message.error(e.message || '压缩失败') }
+  } catch (e: any) { message.error(e.message || t('file.messages.compressFailed')) }
 }
 function openDecompress(row: FileItem) {
   dialog.target = row
@@ -387,10 +392,10 @@ async function submitDecompress() {
   const dest = normalizePath(dialog.form.decompressDest)
   try {
     await decompressFile(dialog.target.path, dest)
-    message.success('解压任务已提交')
+    message.success(t('file.messages.decompressSuccess'))
     dialog.decompress = false
     loadList()
-  } catch (e: any) { message.error(e.message || '解压失败') }
+  } catch (e: any) { message.error(e.message || t('file.messages.decompressFailed')) }
 }
 
 /* ==================== 删除 ==================== */
@@ -407,12 +412,12 @@ async function submitDelete() {
   del.loading = true
   try {
     await deleteFiles(del.paths)
-    message.success('删除成功')
+    message.success(t('file.messages.deleteSuccess'))
     del.show = false
     checkedKeys.value = []
     loadList()
   } catch (e: any) {
-    message.error(e.message || '删除失败')
+    message.error(e.message || t('file.messages.deleteFailed'))
   } finally {
     del.loading = false
   }
@@ -422,9 +427,9 @@ async function submitDelete() {
 async function handleDownload(row: FileItem) {
   try {
     await downloadFileAs(row.path, row.name)
-    message.success('开始下载')
+    message.success(t('file.messages.downloadSuccess'))
   } catch (e: any) {
-    message.error(e.message || '下载失败')
+    message.error(e.message || t('file.messages.downloadFailed'))
   }
 }
 
@@ -452,7 +457,7 @@ function removeUploadItem(idx: number) {
   upload.items.splice(idx, 1)
 }
 async function startUpload() {
-  if (!upload.items.length) { message.warning('请先选择文件'); return }
+  if (!upload.items.length) { message.warning(t('file.messages.selectFileFirst')); return }
   upload.uploading = true
   try {
     for (const item of upload.items) {
@@ -468,11 +473,11 @@ async function startUpload() {
         item.progress = 100
       } catch (err: any) {
         item.status = 'error'
-        item.error = err.message || '上传失败'
+        item.error = err.message || t('file.messages.uploadFailed')
       }
     }
     const ok = upload.items.filter((i) => i.status === 'done').length
-    message.success(`上传完成 ${ok}/${upload.items.length}`)
+    message.success(t('file.messages.uploadDone', { done: ok, total: upload.items.length }))
     upload.show = false
     upload.items = []
     loadList()
@@ -495,7 +500,7 @@ async function openEditor(row: FileItem) {
     editor.content = res.data.content
     editor.size = res.data.size ?? row.size
   } catch (e: any) {
-    message.error(e.message || '读取文件失败')
+    message.error(e.message || t('file.messages.readFileFailed'))
   } finally {
     editor.loading = false
   }
@@ -505,9 +510,9 @@ async function saveEditor() {
   editor.saving = true
   try {
     await writeFileContent(editor.path, editor.content)
-    message.success('保存成功')
+    message.success(t('file.messages.saveSuccess'))
   } catch (e: any) {
-    message.error(e.message || '保存失败')
+    message.error(e.message || t('file.messages.saveFailed'))
   } finally {
     editor.saving = false
   }
@@ -521,6 +526,98 @@ function onKeydown(e: KeyboardEvent) {
 
 /* ==================== 批量 ==================== */
 const checkedPaths = computed(() => checkedKeys.value.map(String))
+
+/* ==================== 回收站 ==================== */
+const showRecycle = ref(false)
+const recycleLoading = ref(false)
+const recycleItems = ref<RecycleItem[]>([])
+const recycleActionId = ref<number | null>(null)
+
+async function openRecycle() {
+  showRecycle.value = true
+  await loadRecycle()
+}
+
+async function loadRecycle() {
+  recycleLoading.value = true
+  try {
+    const data = await listRecycle()
+    recycleItems.value = data?.items || []
+  } catch (e: any) {
+    recycleItems.value = []
+    message.error(e?.message || t('file.messages.loadRecycleFailed'))
+  } finally {
+    recycleLoading.value = false
+  }
+}
+
+async function doRestore(item: RecycleItem) {
+  recycleActionId.value = item.id
+  try {
+    await restoreRecycle(item.id)
+    message.success(t('file.messages.restored'))
+    await loadRecycle()
+    loadList()
+  } catch (e: any) {
+    message.error(e?.message || t('file.messages.restoreFailed'))
+  } finally {
+    recycleActionId.value = null
+  }
+}
+
+async function doPurge(item: RecycleItem) {
+  recycleActionId.value = item.id
+  try {
+    await purgeRecycle(item.id)
+    message.success(t('file.messages.purged'))
+    await loadRecycle()
+  } catch (e: any) {
+    message.error(e?.message || t('file.messages.deleteFailed'))
+  } finally {
+    recycleActionId.value = null
+  }
+}
+
+const recycleColumns = computed<DataTableColumns>(() => [
+  {
+    title: t('file.recycle.originalPath'),
+    key: 'original_path',
+    render: (row: any) => h('span', { class: 'mono', style: 'font-size:var(--fs-caption);word-break:break-all' }, row.original_path)
+  },
+  {
+    title: t('file.recycle.size'),
+    key: 'size',
+    width: 90,
+    render: (row: any) => h('span', { class: 'mono' }, formatSize(row.size))
+  },
+  {
+    title: t('file.recycle.deletedAt'),
+    key: 'deleted_at',
+    width: 160,
+    render: (row: any) => h('span', { class: 'mono', style: 'color:var(--sub);font-size:var(--fs-caption)' }, row.deleted_at)
+  },
+  {
+    title: t('file.columns.actions'),
+    key: 'actions',
+    width: 150,
+    render: (row: any) => h(NSpace, { size: 'small', wrap: false }, () => [
+      h(NButton, {
+        size: 'tiny',
+        type: 'primary',
+        quaternary: true,
+        loading: recycleActionId.value === row.id,
+        onClick: () => doRestore(row as RecycleItem)
+      }, { default: () => t('file.actions.restore') }),
+      h(NButton, {
+        size: 'tiny',
+        type: 'error',
+        quaternary: true,
+        loading: recycleActionId.value === row.id,
+        onClick: () => doPurge(row as RecycleItem)
+      }, { default: () => t('file.actions.purge') })
+    ])
+  }
+])
 
 onMounted(() => {
   checkMobile()
@@ -547,12 +644,12 @@ onBeforeUnmount(() => {
         </template>
       </div>
       <NSpace class="fm-actions" size="small">
-        <NButton v-if="isMobile" size="small" quaternary circle @click="showTree = !showTree" title="目录树">
+        <NButton v-if="isMobile" size="small" quaternary circle @click="showTree = !showTree" :title="t('file.treeTitle')">
           <template #icon><NIcon size="14"><FolderOutline /></NIcon></template>
         </NButton>
         <NInput
           v-model:value="searchKeyword"
-          placeholder="搜索当前目录…"
+          :placeholder="t('file.search.placeholder')"
           clearable
           size="small"
           class="fm-search"
@@ -563,17 +660,21 @@ onBeforeUnmount(() => {
         </NInput>
         <NButton size="small" @click="openMkdir">
           <template #icon><NIcon size="14"><FolderOutline /></NIcon></template>
-          新建文件夹
+          {{ t('file.buttons.mkdir') }}
         </NButton>
         <NButton size="small" @click="openMkfile">
           <template #icon><NIcon size="14"><AddOutline /></NIcon></template>
-          新建文件
+          {{ t('file.buttons.mkfile') }}
         </NButton>
         <NButton size="small" @click="openUpload">
           <template #icon><NIcon size="14"><CloudUploadOutline /></NIcon></template>
-          上传
+          {{ t('file.buttons.upload') }}
         </NButton>
-        <NButton size="small" quaternary circle @click="loadList" title="刷新">
+        <NButton size="small" @click="openRecycle">
+          <template #icon><NIcon size="14"><TrashOutline /></NIcon></template>
+          {{ t('file.recycleTitle') }}
+        </NButton>
+        <NButton size="small" quaternary circle @click="loadList" :title="t('file.buttons.refresh')">
           <template #icon><NIcon size="14"><RefreshOutline /></NIcon></template>
         </NButton>
       </NSpace>
@@ -581,33 +682,33 @@ onBeforeUnmount(() => {
 
     <!-- 批量操作条 -->
     <div v-if="checkedKeys.length" class="fm-batchbar">
-      <span class="fm-batchbar__count">已选 {{ checkedKeys.length }} 项</span>
+      <span class="fm-batchbar__count">{{ t('file.batch.selectedCount', { n: checkedKeys.length }) }}</span>
       <NSpace size="small">
         <NButton size="tiny" @click="openCopy(checkedPaths)">
-          <template #icon><NIcon size="12"><CopyOutline /></NIcon></template>复制
+          <template #icon><NIcon size="12"><CopyOutline /></NIcon></template>{{ t('file.batch.copy') }}
         </NButton>
         <NButton size="tiny" @click="openMove(checkedPaths)">
-          <template #icon><NIcon size="12"><MoveOutline /></NIcon></template>移动
+          <template #icon><NIcon size="12"><MoveOutline /></NIcon></template>{{ t('file.batch.move') }}
         </NButton>
-        <NButton size="tiny" @click="openCompress(checkedPaths)">压缩</NButton>
+        <NButton size="tiny" @click="openCompress(checkedPaths)">{{ t('file.batch.compress') }}</NButton>
         <NButton size="tiny" type="error" @click="openDeleteByChecked">
-          <template #icon><NIcon size="12"><TrashOutline /></NIcon></template>删除
+          <template #icon><NIcon size="12"><TrashOutline /></NIcon></template>{{ t('file.actions.delete') }}
         </NButton>
-        <NButton size="tiny" quaternary @click="checkedKeys = []">取消选择</NButton>
+        <NButton size="tiny" quaternary @click="checkedKeys = []">{{ t('file.batch.clear') }}</NButton>
       </NSpace>
     </div>
 
     <!-- 搜索提示 -->
     <div v-if="inSearchMode" class="fm-search-hint">
-      <NTag size="small" type="info" :bordered="false">搜索中</NTag>
-      <span>关键词「{{ searchKeyword.trim() }}」 · 命中 {{ searchResults.length }} 项</span>
-      <a class="fm-search-hint__exit" @click="searchKeyword = ''">退出搜索</a>
+      <NTag size="small" type="info" :bordered="false">{{ t('file.search.searching') }}</NTag>
+      <span>{{ t('file.search.hint', { keyword: searchKeyword.trim(), count: searchResults.length }) }}</span>
+      <a class="fm-search-hint__exit" @click="searchKeyword = ''">{{ t('file.search.exit') }}</a>
     </div>
 
     <!-- 主体：左树右表 -->
     <div class="fm-body">
       <div class="fm-tree" :class="{ 'fm-tree--hidden': isMobile && !showTree }">
-        <div class="fm-tree__title">目录树</div>
+        <div class="fm-tree__title">{{ t('file.treeTitle') }}</div>
         <NTree
           :data="treeData"
           :load-data="loadTreeNode"
@@ -630,85 +731,101 @@ onBeforeUnmount(() => {
     </div>
   </PageCard>
 
+  <!-- 回收站 -->
+  <NDrawer :show="showRecycle" :width="720" placement="right" @update:show="(v: boolean) => (showRecycle = v)">
+    <NDrawerContent :title="t('file.recycleTitle')" closable>
+      <NAlert type="info" :bordered="false" style="margin-bottom: var(--space-3)">
+        {{ t('file.recycle.alert') }}
+      </NAlert>
+      <DataTable
+        :columns="recycleColumns"
+        :data="recycleItems"
+        :loading="recycleLoading"
+        :pagination="false"
+        size="small"
+      />
+    </NDrawerContent>
+  </NDrawer>
+
   <!-- 新建文件夹 -->
-  <ModalForm v-model:show="dialog.mkdir" title="新建文件夹" @submit="submitMkdir">
-    <NFormItem label="文件夹名称" required>
-      <NInput v-model:value="dialog.form.dirName" placeholder="例如：logs" @keyup.enter="submitMkdir" />
+  <ModalForm v-model:show="dialog.mkdir" :title="t('file.dialogs.mkdir.title')" @submit="submitMkdir">
+    <NFormItem :label="t('file.dialogs.mkdir.name')" required>
+      <NInput v-model:value="dialog.form.dirName" :placeholder="t('file.dialogs.mkdir.namePlaceholder')" @keyup.enter="submitMkdir" />
     </NFormItem>
-    <NFormItem label="所在路径">
+    <NFormItem :label="t('file.dialogs.mkdir.path')">
       <NInput :value="currentPath" readonly />
     </NFormItem>
   </ModalForm>
 
   <!-- 新建文件 -->
-  <ModalForm v-model:show="dialog.mkfile" title="新建文件" @submit="submitMkfile" :width="560">
-    <NFormItem label="文件名" required>
-      <NInput v-model:value="dialog.form.fileName" placeholder="例如：README.md" @keyup.enter="submitMkfile" />
+  <ModalForm v-model:show="dialog.mkfile" :title="t('file.dialogs.mkfile.title')" @submit="submitMkfile" :width="560">
+    <NFormItem :label="t('file.dialogs.mkfile.name')" required>
+      <NInput v-model:value="dialog.form.fileName" :placeholder="t('file.dialogs.mkfile.namePlaceholder')" @keyup.enter="submitMkfile" />
     </NFormItem>
-    <NFormItem label="初始内容（可选）">
-      <NInput v-model:value="dialog.form.fileContent" type="textarea" :rows="6" placeholder="文件内容" />
+    <NFormItem :label="t('file.dialogs.mkfile.content')">
+      <NInput v-model:value="dialog.form.fileContent" type="textarea" :rows="6" :placeholder="t('file.dialogs.mkfile.contentPlaceholder')" />
     </NFormItem>
   </ModalForm>
 
   <!-- 重命名 -->
-  <ModalForm v-model:show="dialog.rename" title="重命名" @submit="submitRename">
-    <NFormItem label="原名称">
+  <ModalForm v-model:show="dialog.rename" :title="t('file.dialogs.rename.title')" @submit="submitRename">
+    <NFormItem :label="t('file.dialogs.rename.oldName')">
       <NInput :value="dialog.target?.name" readonly />
     </NFormItem>
-    <NFormItem label="新名称" required>
+    <NFormItem :label="t('file.dialogs.rename.newName')" required>
       <NInput v-model:value="dialog.form.renameNewName" @keyup.enter="submitRename" />
     </NFormItem>
   </ModalForm>
 
   <!-- 移动 -->
-  <ModalForm v-model:show="dialog.move" title="移动" @submit="submitMove">
-    <NFormItem label="源路径">
+  <ModalForm v-model:show="dialog.move" :title="t('file.dialogs.move.title')" @submit="submitMove">
+    <NFormItem :label="t('file.dialogs.move.source')">
       <NInput :value="dialog.srcPaths.join(', ')" readonly />
     </NFormItem>
-    <NFormItem label="目标目录" required>
-      <NInput v-model:value="dialog.form.targetPath" placeholder="/path/to/dest" />
+    <NFormItem :label="t('file.dialogs.move.target')" required>
+      <NInput v-model:value="dialog.form.targetPath" :placeholder="t('file.dialogs.move.targetPlaceholder')" />
     </NFormItem>
   </ModalForm>
 
   <!-- 复制 -->
-  <ModalForm v-model:show="dialog.copy" title="复制" @submit="submitCopy">
-    <NFormItem label="源路径">
+  <ModalForm v-model:show="dialog.copy" :title="t('file.dialogs.copy.title')" @submit="submitCopy">
+    <NFormItem :label="t('file.dialogs.copy.source')">
       <NInput :value="dialog.srcPaths.join(', ')" readonly />
     </NFormItem>
-    <NFormItem label="目标目录" required>
-      <NInput v-model:value="dialog.form.targetPath" placeholder="/path/to/dest" />
+    <NFormItem :label="t('file.dialogs.copy.target')" required>
+      <NInput v-model:value="dialog.form.targetPath" :placeholder="t('file.dialogs.copy.targetPlaceholder')" />
     </NFormItem>
   </ModalForm>
 
   <!-- 压缩 -->
-  <ModalForm v-model:show="dialog.compress" title="压缩" @submit="submitCompress">
-    <NFormItem label="源文件">
+  <ModalForm v-model:show="dialog.compress" :title="t('file.dialogs.compress.title')" @submit="submitCompress">
+    <NFormItem :label="t('file.dialogs.compress.source')">
       <NInput :value="dialog.srcPaths.join(', ')" readonly />
     </NFormItem>
-    <NFormItem label="压缩格式">
+    <NFormItem :label="t('file.dialogs.compress.format')">
       <NSelect v-model:value="dialog.form.compressFormat" :options="[
         { label: 'zip', value: 'zip' },
         { label: 'tar.gz', value: 'tar.gz' }
       ]" />
     </NFormItem>
-    <NFormItem label="目标文件路径" required>
-      <NInput v-model:value="dialog.form.compressDest" placeholder="/path/to/archive.zip" />
+    <NFormItem :label="t('file.dialogs.compress.dest')" required>
+      <NInput v-model:value="dialog.form.compressDest" :placeholder="t('file.dialogs.compress.destPlaceholder')" />
     </NFormItem>
   </ModalForm>
 
   <!-- 解压 -->
-  <ModalForm v-model:show="dialog.decompress" title="解压" @submit="submitDecompress">
-    <NFormItem label="压缩包">
+  <ModalForm v-model:show="dialog.decompress" :title="t('file.dialogs.decompress.title')" @submit="submitDecompress">
+    <NFormItem :label="t('file.dialogs.decompress.archive')">
       <NInput :value="dialog.target?.path" readonly />
     </NFormItem>
-    <NFormItem label="目标目录" required>
-      <NInput v-model:value="dialog.form.decompressDest" placeholder="/path/to/extract" />
+    <NFormItem :label="t('file.dialogs.decompress.target')" required>
+      <NInput v-model:value="dialog.form.decompressDest" :placeholder="t('file.dialogs.decompress.targetPlaceholder')" />
     </NFormItem>
   </ModalForm>
 
   <!-- 上传 -->
-  <ModalForm v-model:show="upload.show" title="上传文件" :loading="upload.uploading" @submit="startUpload" :width="600">
-    <NFormItem label="目标目录">
+  <ModalForm v-model:show="upload.show" :title="t('file.dialogs.upload.title')" :loading="upload.uploading" @submit="startUpload" :width="600">
+    <NFormItem :label="t('file.dialogs.upload.target')">
       <NInput :value="currentPath" readonly />
     </NFormItem>
     <div
@@ -721,15 +838,15 @@ onBeforeUnmount(() => {
     >
       <input ref="fileInput" type="file" multiple hidden @change="handleFileSelect" />
       <NIcon size="32" class="dropzone__icon"><CloudUploadOutline /></NIcon>
-      <p class="dropzone__title">拖拽文件到此处，或点击选择</p>
-      <p class="dropzone__hint">支持多文件同时上传到当前目录</p>
+      <p class="dropzone__title">{{ t('file.dialogs.upload.dropTitle') }}</p>
+      <p class="dropzone__hint">{{ t('file.dialogs.upload.dropHint') }}</p>
     </div>
     <div v-if="upload.items.length" class="upload-list">
       <div v-for="(item, idx) in upload.items" :key="item.name + idx" class="upload-item">
         <div class="upload-item__head">
           <span class="upload-item__name">{{ item.name }}</span>
           <span class="upload-item__meta mono">{{ formatSize(item.size) }} · {{ item.progress }}%</span>
-          <NButton v-if="item.status !== 'uploading'" size="tiny" text @click="removeUploadItem(idx)">移除</NButton>
+          <NButton v-if="item.status !== 'uploading'" size="tiny" text @click="removeUploadItem(idx)">{{ t('file.actions.remove') }}</NButton>
         </div>
         <NProgress
           :percentage="item.progress"
@@ -744,17 +861,17 @@ onBeforeUnmount(() => {
   <!-- 删除确认 -->
   <ConfirmDialog
     v-model:show="del.show"
-    title="确认删除"
-    :content="`确定删除选中的 ${del.paths.length} 项？此操作不可恢复。`"
+    :title="t('file.dialogs.delete.title')"
+    :content="t('file.dialogs.delete.content', { count: del.paths.length })"
     type="error"
-    confirm-text="删除"
+    :confirm-text="t('file.actions.delete')"
     :loading="del.loading"
     @confirm="submitDelete"
   />
 
   <!-- 代码编辑器抽屉 -->
   <NDrawer v-model:show="editor.show" :width="820" placement="right">
-    <NDrawerContent :title="`编辑：${editor.name}`" :closable="true">
+    <NDrawerContent :title="t('file.dialogs.editor.title', { name: editor.name })" :closable="true">
       <div class="editor-meta">
         <span class="mono editor-meta__path">{{ editor.path }}</span>
         <NTag size="small" :bordered="false">{{ editor.language }}</NTag>
@@ -763,7 +880,7 @@ onBeforeUnmount(() => {
         v-if="editor.size > 1048576"
         type="warning"
         style="margin-bottom: var(--space-3)"
-        :title="`文件较大（${formatSize(editor.size)}），编辑可能较慢`"
+        :title="t('file.dialogs.editor.largeFile', { size: formatSize(editor.size) })"
       />
       <CodeEditor
         v-model:modelValue="editor.content"
@@ -772,9 +889,9 @@ onBeforeUnmount(() => {
       />
       <template #footer>
         <NSpace justify="end">
-          <NButton @click="editor.show = false">关闭</NButton>
+          <NButton @click="editor.show = false">{{ t('file.actions.close') }}</NButton>
           <NButton type="primary" :loading="editor.saving" @click="saveEditor">
-            保存 (Ctrl+S)
+            {{ t('file.actions.save') }}
           </NButton>
         </NSpace>
       </template>
@@ -826,7 +943,7 @@ onBeforeUnmount(() => {
 }
 
 .crumb-sep {
-  color: var(--faint);
+  color: var(--text-quaternary);
 }
 
 .fm-actions {
@@ -885,7 +1002,7 @@ onBeforeUnmount(() => {
 
 .fm-tree__title {
   font-size: var(--fs-caption);
-  color: var(--faint);
+  color: var(--text-quaternary);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   margin-bottom: var(--space-2);
@@ -952,7 +1069,7 @@ onBeforeUnmount(() => {
 }
 
 .dropzone__hint {
-  color: var(--faint);
+  color: var(--text-quaternary);
   font-size: var(--fs-caption);
 }
 
@@ -981,7 +1098,7 @@ onBeforeUnmount(() => {
 
 .upload-item__meta {
   font-size: var(--fs-caption);
-  color: var(--faint);
+  color: var(--text-quaternary);
   flex-shrink: 0;
 }
 
@@ -1003,7 +1120,7 @@ onBeforeUnmount(() => {
 .editor-meta__path {
   flex: 1;
   font-size: var(--fs-caption);
-  color: var(--faint);
+  color: var(--text-quaternary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

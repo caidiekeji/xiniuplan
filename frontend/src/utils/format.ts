@@ -46,3 +46,11 @@ export function truncate(str: string, maxLen: number): string {
   if (maxLen === 1) return '…'
   return str.slice(0, maxLen - 1) + '…'
 }
+
+/**
+ * 将 ISO 8601 时间字符串格式化为 "YYYY-MM-DD HH:mm:ss"（无效输入原样返回，空值返回 "-"）
+ */
+export function formatISOTime(s: string | null | undefined): string {
+  if (!s) return '-'
+  return s.replace('T', ' ').substring(0, 19)
+}

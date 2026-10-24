@@ -63,6 +63,16 @@ func Init(dbPath string) (*gorm.DB, error) {
 		&AlertHistory{},
 		&DNSAccount{},
 		&PluginConfig{},
+		&RemoteStorage{},
+		&APIKey{},
+		&SiteTamperBaseline{},
+		&RecycleItem{},
+		&ProbeMonitor{},
+		&ProbeResult{},
+		&DaemonProcess{},
+		&DeployApp{},
+		&DeployLog{},
+		&Node{},
 	); err != nil {
 		return nil, fmt.Errorf("auto migrate: %w", err)
 	}

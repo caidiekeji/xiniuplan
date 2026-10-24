@@ -1,15 +1,15 @@
 <script setup lang="ts">
-import { ref, onErrorCaptured, h, defineComponent } from 'vue'
+import { ref, onErrorCaptured, defineComponent } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { NAlert, NButton, NSpace, NThing } from 'naive-ui'
 
 interface Props {
-  /** 错误时显示的标题 */
+  /** 错误时显示的标题（缺省时用 i18n 默认文案） */
   title?: string
 }
 
-const props = withDefaults(defineProps<Props>(), {
-  title: '页面渲染出错'
-})
+const { t } = useI18n()
+defineProps<Props>()
 
 const hasError = ref(false)
 const errorMessage = ref('')
@@ -46,8 +46,8 @@ const SlotHost = defineComponent({
       <NAlert type="error" class="error-boundary__alert">
         <template #header>
           <div class="error-boundary__header">
-            <span>{{ title }}</span>
-            <NButton size="small" type="error" @click="handleRetry">重试</NButton>
+            <span>{{ title || t('common.errorBoundary.title') }}</span>
+            <NButton size="small" type="error" @click="handleRetry">{{ t('common.errorBoundary.retry') }}</NButton>
           </div>
         </template>
         <NSpace vertical size="small">

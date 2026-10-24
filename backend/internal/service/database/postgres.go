@@ -332,9 +332,16 @@ func (e *pgEngine) GetTableSchema(dbName, table string) (TableSchema, error) {
 	for colRows.Next() {
 		var col TableColumn
 		var defaultVal *string
-		if err := colRows.Scan(&col.Field, &col.Type, &col.Null, &defaultVal, &col.Type, &col.Extra); err != nil {
+		// full_type（第 5 列）是带长度/精度的完整类型，会覆盖裸 data_type，
+		// 因此必须用独立变量接收，不能和 col.Type 共用 —— 否则两次 Scan
+		// 会互相覆盖，最终 col.Type 变成裸类型（如 varchar 而非 varchar(64)）
+		var fullType string
+		if err := colRows.Scan(&col.Field, &col.Type, &col.Null, &defaultVal, &fullType, &col.Extra); err != nil {
 			colRows.Close()
 			return TableSchema{}, err
+		}
+		if fullType != "" {
+			col.Type = fullType
 		}
 		col.Key = ""
 		if defaultVal != nil {
@@ -800,7 +807,7 @@ func (s *PostgresService) GetEngine(instanceID uint) (*pgEngine, error) {
 		return nil, fmt.Errorf("实例不存在: %d", instanceID)
 	}
 	if instance.Type != "postgres" {
-		return nil, fmt.Errorf("实例类型 %s 不是 PostgreSQL", instance.Type)
+		return nil, NewUnsupportedTypeError(instance.Type, "该操作仅支持 PostgreSQL 实例")
 	}
 	return newPgEngine(s.db, &instance), nil
 }

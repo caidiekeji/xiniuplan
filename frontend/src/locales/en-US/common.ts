@@ -9,7 +9,6 @@ export default {
   operation: 'Operation',
   status: 'Status',
   loading: 'Loading',
-  submit: 'Submit',
   reset: 'Reset',
   close: 'Close',
   back: 'Back',
@@ -21,6 +20,10 @@ export default {
   operationSuccess: 'Operation successful',
   operationFailed: 'Operation failed',
   noData: 'No data',
+  retry: 'Retry',
+  commandPalette: 'Command palette',
+  commandPlaceholder: 'Search pages or actions…',
+  noResults: 'No results',
   all: 'All',
   actions: 'Actions',
   name: 'Name',
@@ -38,5 +41,16 @@ export default {
   expand: 'Expand',
   notifications: 'Notifications',
   toggleLight: 'Switch to light',
-  toggleDark: 'Switch to dark'
+  toggleDark: 'Switch to dark',
+  errorBoundary: {
+    title: 'Page render error',
+    retry: 'Retry'
+  },
+  errors: {
+    pageNotFound: 'Page not found or the URL is invalid',
+    appError: 'Application error: {msg}',
+    requestFailed: 'Request failed',
+    networkError: 'Network error',
+    buildRequestFailed: 'Build request failed (HTTP {status})'
+  }
 }

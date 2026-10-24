@@ -28,8 +28,6 @@ export interface NetworkStats {
   time_wait: number
   close_wait: number
   other: number
-  upload_speed: number
-  download_speed: number
 }
 
 export interface NetworkConnection {
@@ -63,10 +61,11 @@ export function getProcesses(top?: number, sort?: 'cpu' | 'memory') {
   })
 }
 
-export function killProcess(pid: number) {
+export function killProcess(pid: number, signal?: number) {
   return request({
-    url: `/monitor/processes/${pid}/kill`,
-    method: 'post'
+    url: '/monitor/processes/kill',
+    method: 'post',
+    data: { pid, signal }
   })
 }
 

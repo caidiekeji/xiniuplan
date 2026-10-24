@@ -13,7 +13,7 @@ const routes: RouteRecordRaw[] = [
     path: '/change-password',
     name: 'ChangePassword',
     component: () => import('@/views/login/ChangePassword.vue'),
-    meta: { title: '修改密码' }
+    meta: { title: 'changePassword.title' }
   },
   {
     path: '/',
@@ -31,6 +31,12 @@ const routes: RouteRecordRaw[] = [
         name: 'Website',
         component: () => import('@/views/website/index.vue'),
         meta: { title: 'menu.website', icon: 'website' }
+      },
+      {
+        path: 'deploy',
+        name: 'Deploy',
+        component: () => import('@/views/deploy/index.vue'),
+        meta: { title: 'menu.deploy', icon: 'deploy' }
       },
       {
         path: 'database',
@@ -75,10 +81,22 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'menu.cron', icon: 'cron' }
       },
       {
+        path: 'daemon',
+        name: 'Daemon',
+        component: () => import('@/views/daemon/index.vue'),
+        meta: { title: 'menu.daemon', icon: 'daemon' }
+      },
+      {
         path: 'monitor',
         name: 'Monitor',
         component: () => import('@/views/monitor/index.vue'),
         meta: { title: 'menu.monitor', icon: 'monitor' }
+      },
+      {
+        path: 'probe',
+        name: 'Probe',
+        component: () => import('@/views/probe/index.vue'),
+        meta: { title: 'menu.probe', icon: 'probe' }
       },
       {
         path: 'backup',
@@ -91,6 +109,12 @@ const routes: RouteRecordRaw[] = [
         name: 'Firewall',
         component: () => import('@/views/firewall/index.vue'),
         meta: { title: 'menu.firewall', icon: 'firewall' }
+      },
+      {
+        path: 'protection',
+        name: 'Protection',
+        component: () => import('@/views/protection/index.vue'),
+        meta: { title: 'menu.protection', icon: 'protection' }
       },
       {
         path: 'ssh',
@@ -123,6 +147,24 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'menu.audit', icon: 'audit' }
       },
       {
+        path: 'sessions',
+        name: 'Sessions',
+        component: () => import('@/views/sessions/index.vue'),
+        meta: { title: 'menu.sessions', icon: 'users' }
+      },
+      {
+        path: 'nodes',
+        name: 'Nodes',
+        component: () => import('@/views/nodes/index.vue'),
+        meta: { title: 'menu.nodes', icon: 'nodes' }
+      },
+      {
+        path: 'ai',
+        name: 'AIAssistant',
+        component: () => import('@/views/ai/index.vue'),
+        meta: { title: 'menu.ai', icon: 'ai' }
+      },
+      {
         path: 'settings',
         name: 'Settings',
         component: () => import('@/views/settings/index.vue'),
@@ -134,7 +176,7 @@ const routes: RouteRecordRaw[] = [
     path: '/reset-password',
     name: 'ResetPassword',
     component: () => import('@/views/login/ResetPassword.vue'),
-    meta: { public: true, title: '重置密码' }
+    meta: { public: true, title: 'resetPassword.title' }
   },
   {
     path: '/:pathMatch(.*)*',

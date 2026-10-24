@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, h, watch } from 'vue'
+import { ref, reactive, computed, onMounted, h } from 'vue'
 import {
   NButton, NIcon, NForm, NFormItem, NInput, NSelect, NCheckboxGroup,
-  NCheckbox, NSpace, NTag, NSwitch, NTabs, NTabPane, useMessage
+  NCheckbox, NSpace, NTag, NSwitch, NTabs, NTabPane
 } from 'naive-ui'
+import { useMessage } from '@/composables/useMessage'
 import {
   AddOutline, PlayOutline, StopOutline, CreateOutline,
   TrashOutline, FlashOutline, ChevronDownOutline, ChevronForwardOutline
@@ -23,17 +24,19 @@ import {
   type CreateAlertRuleData, type CreateAlertChannelData
 } from '@/api/alert'
 import type { DataTableColumns } from 'naive-ui'
+import { useI18n } from 'vue-i18n'
 
 const message = useMessage()
+const { t } = useI18n()
 
 /* ==================== 常量映射 ==================== */
 
-const metricLabelMap: Record<MetricType, string> = {
-  cpu: 'CPU',
-  memory: '内存',
-  disk: '磁盘',
-  network: '网络'
-}
+const metricLabelMap = computed<Record<MetricType, string>>(() => ({
+  cpu: t('alert.metrics.cpu'),
+  memory: t('alert.metrics.memory'),
+  disk: t('alert.metrics.disk'),
+  network: t('alert.metrics.network')
+}))
 
 const metricTagTypeMap: Record<MetricType, 'info' | 'success' | 'warning' | 'error' | 'default'> = {
   cpu: 'info',
@@ -49,11 +52,11 @@ const metricUnitMap: Record<MetricType, string> = {
   network: 'MB/s'
 }
 
-const conditionLabelMap: Record<AlertCondition, string> = {
-  gt: '大于',
-  lt: '小于',
-  eq: '等于'
-}
+const conditionLabelMap = computed<Record<AlertCondition, string>>(() => ({
+  gt: t('alert.conditions.gt'),
+  lt: t('alert.conditions.lt'),
+  eq: t('alert.conditions.eq')
+}))
 
 const conditionSymbolMap: Record<AlertCondition, string> = {
   gt: '>',
@@ -61,14 +64,14 @@ const conditionSymbolMap: Record<AlertCondition, string> = {
   eq: '='
 }
 
-const channelLabelMap: Record<ChannelType, string> = {
-  email: '邮件',
-  dingtalk: '钉钉',
-  wechat: '企业微信',
-  feishu: '飞书',
-  telegram: 'Telegram',
-  webhook: 'Webhook'
-}
+const channelLabelMap = computed<Record<ChannelType, string>>(() => ({
+  email: t('alert.channels.email'),
+  dingtalk: t('alert.channels.dingtalk'),
+  wechat: t('alert.channels.wechat'),
+  feishu: t('alert.channels.feishu'),
+  telegram: t('alert.channels.telegram'),
+  webhook: t('alert.channels.webhook')
+}))
 
 const channelTagTypeMap: Record<ChannelType, 'info' | 'success' | 'warning' | 'error' | 'default'> = {
   email: 'info',
@@ -79,25 +82,31 @@ const channelTagTypeMap: Record<ChannelType, 'info' | 'success' | 'warning' | 'e
   webhook: 'info'
 }
 
-const historyStatusMap: Record<AlertStatus, { status: StatusType; text: string }> = {
-  triggered: { status: 'error', text: '触发中' },
-  recovered: { status: 'running', text: '已恢复' }
-}
+const historyStatusMap = computed<Record<AlertStatus, { status: StatusType; text: string }>>(() => ({
+  triggered: { status: 'error', text: t('alert.ruleStatus.triggered') },
+  recovered: { status: 'running', text: t('alert.ruleStatus.recovered') }
+}))
 
-const notificationStatusMap: Record<NotificationStatus, { status: StatusType; text: string }> = {
-  pending: { status: 'warning', text: '发送中' },
-  sent: { status: 'running', text: '已发送' },
-  failed: { status: 'error', text: '失败' }
-}
+const notificationStatusMap = computed<Record<NotificationStatus, { status: StatusType; text: string }>>(() => ({
+  pending: { status: 'warning', text: t('alert.notifyStatus.pending') },
+  sent: { status: 'running', text: t('alert.notifyStatus.sent') },
+  failed: { status: 'error', text: t('alert.notifyStatus.failed') }
+}))
 
-const metricOptions = Object.entries(metricLabelMap).map(([value, label]) => ({ label, value }))
-const conditionOptions = Object.entries(conditionLabelMap).map(([value, label]) => ({ label, value }))
-const channelTypeOptions = Object.entries(channelLabelMap).map(([value, label]) => ({ label, value }))
-const historyStatusOptions: Array<{ label: string; value: string }> = [
-  { label: '全部', value: '' },
-  { label: '触发中', value: 'triggered' },
-  { label: '已恢复', value: 'recovered' }
-]
+const metricOptions = computed(() =>
+  Object.entries(metricLabelMap.value).map(([value, label]) => ({ label, value }))
+)
+const conditionOptions = computed(() =>
+  Object.entries(conditionLabelMap.value).map(([value, label]) => ({ label, value }))
+)
+const channelTypeOptions = computed(() =>
+  Object.entries(channelLabelMap.value).map(([value, label]) => ({ label, value }))
+)
+const historyStatusOptions = computed<Array<{ label: string; value: string }>>(() => [
+  { label: t('alert.ruleStatus.all'), value: '' },
+  { label: t('alert.ruleStatus.triggered'), value: 'triggered' },
+  { label: t('alert.ruleStatus.recovered'), value: 'recovered' }
+])
 
 /* ==================== Tab 1: 告警规则 ==================== */
 
@@ -128,7 +137,7 @@ function getChannelName(id: string): string {
 }
 
 function describeRule(row: AlertRule): string {
-  const metric = metricLabelMap[row.metric_type]
+  const metric = metricLabelMap.value[row.metric_type]
   const symbol = conditionSymbolMap[row.condition]
   const unit = metricUnitMap[row.metric_type]
   return `${metric} ${symbol} ${row.threshold}${unit}`
@@ -165,7 +174,7 @@ const rulesPagination = computed(() => ({
 
 const ruleColumns = computed<DataTableColumns>(() => [
   {
-    title: '规则名称',
+    title: t('alert.rules.columns.name'),
     key: 'name',
     width: 180,
     render: (row: any) => h('div', { class: 'rule-name' }, [
@@ -176,7 +185,7 @@ const ruleColumns = computed<DataTableColumns>(() => [
     ])
   },
   {
-    title: '指标类型',
+    title: t('alert.rules.columns.metric'),
     key: 'metric_type',
     width: 100,
     render: (row: any) => h(NTag, {
@@ -184,27 +193,27 @@ const ruleColumns = computed<DataTableColumns>(() => [
       type: metricTagTypeMap[row.metric_type as MetricType],
       bordered: false,
       round: true
-    }, { default: () => metricLabelMap[row.metric_type as MetricType] })
+    }, { default: () => metricLabelMap.value[row.metric_type as MetricType] })
   },
   {
-    title: '条件',
+    title: t('alert.rules.columns.condition'),
     key: 'condition',
     width: 160,
     render: (row: any) => h('span', { class: 'mono rule-condition' }, describeRule(row as AlertRule))
   },
   {
-    title: '持续时间',
+    title: t('alert.rules.columns.duration'),
     key: 'duration',
     width: 100,
-    render: (row: any) => h('span', { class: 'mono' }, `${row.duration} 分钟`)
+    render: (row: any) => h('span', { class: 'mono' }, t('alert.durationUnit', { duration: row.duration }))
   },
   {
-    title: '通知渠道',
+    title: t('alert.rules.columns.channels'),
     key: 'channels',
     width: 200,
     render: (row: any) => {
       const ids: string[] = row.channels || []
-      if (ids.length === 0) return h('span', { style: 'color:var(--faint);font-size:var(--fs-caption)' }, '—')
+      if (ids.length === 0) return h('span', { style: 'color: var(--text-quaternary);font-size:var(--fs-caption)' }, '—')
       return h(NSpace, { size: 'small', wrap: true }, {
         default: () => ids.map((id) => h(NTag, {
           size: 'small',
@@ -216,16 +225,16 @@ const ruleColumns = computed<DataTableColumns>(() => [
     }
   },
   {
-    title: '状态',
+    title: t('alert.rules.columns.status'),
     key: 'enabled',
     width: 100,
     render: (row: any) => h(StatusTag, {
       status: row.enabled ? 'running' : 'stopped',
-      text: row.enabled ? '启用' : '禁用'
+      text: row.enabled ? t('alert.status.enabled') : t('alert.status.disabled')
     })
   },
   {
-    title: '操作',
+    title: t('alert.rules.columns.actions'),
     key: 'actions',
     width: 280,
     render: (row: any) => {
@@ -241,7 +250,7 @@ const ruleColumns = computed<DataTableColumns>(() => [
             onClick: () => isEnabled ? handleDisableRule(row.id) : handleEnableRule(row.id)
           }, {
             icon: () => h(NIcon, null, { default: () => h(isEnabled ? StopOutline : PlayOutline) }),
-            default: () => isEnabled ? '禁用' : '启用'
+            default: () => isEnabled ? t('alert.status.disabled') : t('alert.status.enabled')
           }),
           h(NButton, {
             size: 'tiny',
@@ -250,7 +259,7 @@ const ruleColumns = computed<DataTableColumns>(() => [
             onClick: () => handleTestRule(row.id)
           }, {
             icon: () => h(NIcon, null, { default: () => h(FlashOutline) }),
-            default: () => '测试'
+            default: () => t('alert.actions.test')
           }),
           h(NButton, {
             size: 'tiny',
@@ -258,7 +267,7 @@ const ruleColumns = computed<DataTableColumns>(() => [
             onClick: () => openRuleEdit(row.id)
           }, {
             icon: () => h(NIcon, null, { default: () => h(CreateOutline) }),
-            default: () => '编辑'
+            default: () => t('alert.actions.edit')
           }),
           h(NButton, {
             size: 'tiny',
@@ -268,7 +277,7 @@ const ruleColumns = computed<DataTableColumns>(() => [
             onClick: () => openRuleDelete(row.id)
           }, {
             icon: () => h(NIcon, null, { default: () => h(TrashOutline) }),
-            default: () => '删除'
+            default: () => t('alert.actions.delete')
           })
         ]
       })
@@ -280,10 +289,10 @@ async function handleEnableRule(id: number) {
   ruleActionLoadingId.value = id
   try {
     await enableAlertRule(id)
-    message.success('规则已启用')
+    message.success(t('alert.rules.messages.enabled'))
     loadRules()
   } catch (err: any) {
-    message.error(err.message || '启用失败')
+    message.error(err.message || t('alert.rules.messages.enableFailed'))
   } finally {
     ruleActionLoadingId.value = null
   }
@@ -293,10 +302,10 @@ async function handleDisableRule(id: number) {
   ruleActionLoadingId.value = id
   try {
     await disableAlertRule(id)
-    message.success('规则已禁用')
+    message.success(t('alert.rules.messages.disabled'))
     loadRules()
   } catch (err: any) {
-    message.error(err.message || '禁用失败')
+    message.error(err.message || t('alert.rules.messages.disableFailed'))
   } finally {
     ruleActionLoadingId.value = null
   }
@@ -306,9 +315,9 @@ async function handleTestRule(id: number) {
   ruleActionLoadingId.value = id
   try {
     await testAlertRule(id)
-    message.success('测试消息已发送')
+    message.success(t('alert.rules.messages.tested'))
   } catch (err: any) {
-    message.error(err.message || '测试失败')
+    message.error(err.message || t('alert.rules.messages.testFailed'))
   } finally {
     ruleActionLoadingId.value = null
   }
@@ -333,8 +342,8 @@ const ruleForm = reactive({
 })
 
 const ruleFormRules = {
-  name: { required: true, message: '请输入规则名称', trigger: 'blur' },
-  threshold: { required: true, message: '请输入阈值', trigger: 'blur' }
+  name: { required: true, message: t('alert.rules.messages.nameRequired'), trigger: 'blur' },
+  threshold: { required: true, message: t('alert.rules.messages.thresholdRequired'), trigger: 'blur' }
 }
 
 function resetRuleForm() {
@@ -391,15 +400,15 @@ async function handleRuleFormSubmit() {
   try {
     if (ruleIsEdit.value && ruleEditId.value !== null) {
       await updateAlertRule(ruleEditId.value, data)
-      message.success('规则已更新')
+      message.success(t('alert.rules.messages.updated'))
     } else {
       await createAlertRule(data)
-      message.success('规则已创建')
+      message.success(t('alert.rules.messages.created'))
     }
     showRuleForm.value = false
     loadRules()
   } catch (err: any) {
-    message.error(err.message || '保存失败')
+    message.error(err.message || t('alert.rules.messages.saveFailed'))
   } finally {
     ruleFormLoading.value = false
   }
@@ -424,11 +433,11 @@ async function handleRuleDeleteConfirm() {
   ruleDeleteLoading.value = true
   try {
     await deleteAlertRule(ruleDeleteId.value)
-    message.success('规则已删除')
+    message.success(t('alert.rules.messages.deleted'))
     showRuleDelete.value = false
     loadRules()
   } catch (err: any) {
-    message.error(err.message || '删除失败')
+    message.error(err.message || t('alert.rules.messages.deleteFailed'))
   } finally {
     ruleDeleteLoading.value = false
   }
@@ -474,13 +483,13 @@ const channelsPagination = computed(() => ({
 
 const channelColumns = computed<DataTableColumns>(() => [
   {
-    title: '渠道名称',
+    title: t('alert.channelsTab.columns.name'),
     key: 'name',
     width: 180,
     render: (row: any) => h('span', { class: 'channel-name' }, row.name)
   },
   {
-    title: '类型',
+    title: t('alert.channelsTab.columns.type'),
     key: 'type',
     width: 120,
     render: (row: any) => h(NTag, {
@@ -488,25 +497,25 @@ const channelColumns = computed<DataTableColumns>(() => [
       type: channelTagTypeMap[row.type as ChannelType],
       bordered: false,
       round: true
-    }, { default: () => channelLabelMap[row.type as ChannelType] })
+    }, { default: () => channelLabelMap.value[row.type as ChannelType] })
   },
   {
-    title: '状态',
+    title: t('alert.channelsTab.columns.status'),
     key: 'enabled',
     width: 100,
     render: (row: any) => h(StatusTag, {
       status: row.enabled ? 'running' : 'stopped',
-      text: row.enabled ? '启用' : '禁用'
+      text: row.enabled ? t('alert.status.enabled') : t('alert.status.disabled')
     })
   },
   {
-    title: '创建时间',
+    title: t('alert.channelsTab.columns.createdAt'),
     key: 'created_at',
     width: 180,
     render: (row: any) => h('span', { class: 'mono', style: 'color:var(--sub);font-size:var(--fs-caption)' }, row.created_at || '—')
   },
   {
-    title: '操作',
+    title: t('alert.channelsTab.columns.actions'),
     key: 'actions',
     width: 200,
     render: (row: any) => {
@@ -520,7 +529,7 @@ const channelColumns = computed<DataTableColumns>(() => [
             onClick: () => handleTestChannel(row.id)
           }, {
             icon: () => h(NIcon, null, { default: () => h(FlashOutline) }),
-            default: () => '测试'
+            default: () => t('alert.actions.test')
           }),
           h(NButton, {
             size: 'tiny',
@@ -528,7 +537,7 @@ const channelColumns = computed<DataTableColumns>(() => [
             onClick: () => openChannelEdit(row.id)
           }, {
             icon: () => h(NIcon, null, { default: () => h(CreateOutline) }),
-            default: () => '编辑'
+            default: () => t('alert.actions.edit')
           }),
           h(NButton, {
             size: 'tiny',
@@ -538,7 +547,7 @@ const channelColumns = computed<DataTableColumns>(() => [
             onClick: () => openChannelDelete(row.id)
           }, {
             icon: () => h(NIcon, null, { default: () => h(TrashOutline) }),
-            default: () => '删除'
+            default: () => t('alert.actions.delete')
           })
         ]
       })
@@ -550,9 +559,9 @@ async function handleTestChannel(id: number) {
   channelActionLoadingId.value = id
   try {
     await testAlertChannel(id)
-    message.success('测试消息已发送')
+    message.success(t('alert.rules.messages.tested'))
   } catch (err: any) {
-    message.error(err.message || '测试失败')
+    message.error(err.message || t('alert.rules.messages.testFailed'))
   } finally {
     channelActionLoadingId.value = null
   }
@@ -583,7 +592,7 @@ const channelForm = reactive({
 })
 
 const channelFormRules = {
-  name: { required: true, message: '请输入渠道名称', trigger: 'blur' }
+  name: { required: true, message: t('alert.channelsTab.messages.nameRequired'), trigger: 'blur' }
 }
 
 function resetChannelForm() {
@@ -694,16 +703,16 @@ async function handleChannelFormSubmit() {
   try {
     if (channelIsEdit.value && channelEditId.value !== null) {
       await updateAlertChannel(channelEditId.value, data)
-      message.success('渠道已更新')
+      message.success(t('alert.channelsTab.messages.updated'))
     } else {
       await createAlertChannel(data)
-      message.success('渠道已创建')
+      message.success(t('alert.channelsTab.messages.created'))
     }
     showChannelForm.value = false
     loadChannelsList()
     loadChannels()
   } catch (err: any) {
-    message.error(err.message || '保存失败')
+    message.error(err.message || t('alert.channelsTab.messages.saveFailed'))
   } finally {
     channelFormLoading.value = false
   }
@@ -728,12 +737,12 @@ async function handleChannelDeleteConfirm() {
   channelDeleteLoading.value = true
   try {
     await deleteAlertChannel(channelDeleteId.value)
-    message.success('渠道已删除')
+    message.success(t('alert.channelsTab.messages.deleted'))
     showChannelDelete.value = false
     loadChannelsList()
     loadChannels()
   } catch (err: any) {
-    message.error(err.message || '删除失败')
+    message.error(err.message || t('alert.channelsTab.messages.deleteFailed'))
   } finally {
     channelDeleteLoading.value = false
   }
@@ -752,7 +761,7 @@ const expandedHistoryId = ref<number | null>(null)
 
 // 规则下拉选项（供历史筛选）
 const ruleOptions = computed(() => [
-  { label: '全部规则', value: '' },
+  { label: t('alert.history.allRules'), value: '' },
   ...rules.value.map((r) => ({ label: r.name, value: String(r.id) }))
 ])
 
@@ -823,19 +832,19 @@ const historyColumns = computed<DataTableColumns>(() => [
     }
   },
   {
-    title: '触发时间',
+    title: t('alert.history.columns.triggeredAt'),
     key: 'triggered_at',
     width: 170,
     render: (row: any) => h('span', { class: 'mono', style: 'color:var(--sub);font-size:var(--fs-caption)' }, row.triggered_at || '—')
   },
   {
-    title: '规则名称',
+    title: t('alert.history.columns.ruleName'),
     key: 'rule_name',
     width: 160,
     render: (row: any) => h('span', { class: 'history-rule-name' }, row.rule_name)
   },
   {
-    title: '指标类型',
+    title: t('alert.history.columns.metric'),
     key: 'metric_type',
     width: 90,
     render: (row: any) => h(NTag, {
@@ -843,40 +852,40 @@ const historyColumns = computed<DataTableColumns>(() => [
       type: metricTagTypeMap[row.metric_type as MetricType],
       bordered: false,
       round: true
-    }, { default: () => metricLabelMap[row.metric_type as MetricType] })
+    }, { default: () => metricLabelMap.value[row.metric_type as MetricType] })
   },
   {
-    title: '触发值',
+    title: t('alert.history.columns.triggerValue'),
     key: 'trigger_value',
     width: 100,
     render: (row: any) => h('span', { class: 'mono history-value' }, `${Number(row.trigger_value).toFixed(1)}${metricUnitMap[row.metric_type as MetricType]}`)
   },
   {
-    title: '阈值',
+    title: t('alert.history.columns.threshold'),
     key: 'threshold',
     width: 90,
     render: (row: any) => h('span', { class: 'mono', style: 'color:var(--sub)' }, `${row.threshold}${metricUnitMap[row.metric_type as MetricType]}`)
   },
   {
-    title: '状态',
+    title: t('alert.history.columns.status'),
     key: 'status',
     width: 100,
     render: (row: any) => {
-      const cfg = historyStatusMap[row.status as AlertStatus]
+      const cfg = historyStatusMap.value[row.status as AlertStatus]
       return h(StatusTag, { status: cfg.status, text: cfg.text })
     }
   },
   {
-    title: '通知状态',
+    title: t('alert.history.columns.notifyStatus'),
     key: 'notification_status',
     width: 100,
     render: (row: any) => {
-      const cfg = notificationStatusMap[row.notification_status as NotificationStatus]
+      const cfg = notificationStatusMap.value[row.notification_status as NotificationStatus]
       return h(StatusTag, { status: cfg.status, text: cfg.text })
     }
   },
   {
-    title: '恢复时间',
+    title: t('alert.history.columns.recoveredAt'),
     key: 'recovered_at',
     width: 170,
     render: (row: any) => h('span', { class: 'mono', style: 'color:var(--sub);font-size:var(--fs-caption)' }, row.recovered_at || '—')
@@ -884,13 +893,6 @@ const historyColumns = computed<DataTableColumns>(() => [
 ])
 
 // 展开行内容（notification_error）
-function renderExpandedRow(row: any) {
-  if (expandedHistoryId.value !== row.id || !row.notification_error) return null
-  return h('div', { class: 'history-expand' }, [
-    h('span', { class: 'history-expand__label' }, '通知错误：'),
-    h('span', { class: 'history-expand__error mono' }, row.notification_error)
-  ])
-}
 
 /* ==================== 生命周期 ==================== */
 
@@ -905,14 +907,14 @@ onMounted(() => {
 <template>
   <NTabs type="line" animated>
     <!-- ==================== Tab 1: 告警规则 ==================== -->
-    <NTabPane name="rules" tab="告警规则">
-      <PageCard title="告警规则" subtitle="配置服务器资源指标的告警触发条件">
+    <NTabPane name="rules" :tab="t('alert.tabs.rules')">
+      <PageCard :title="t('alert.rules.title')" :subtitle="t('alert.rules.subtitle')">
         <template #extra>
           <NButton type="primary" @click="openRuleCreate">
             <template #icon>
               <NIcon><AddOutline /></NIcon>
             </template>
-            创建规则
+            {{ t('alert.rules.create') }}
           </NButton>
         </template>
 
@@ -926,14 +928,14 @@ onMounted(() => {
     </NTabPane>
 
     <!-- ==================== Tab 2: 通知渠道 ==================== -->
-    <NTabPane name="channels" tab="通知渠道">
-      <PageCard title="通知渠道" subtitle="管理告警消息的发送渠道（邮件 / 钉钉 / 企微 / 飞书 / Telegram / Webhook）">
+    <NTabPane name="channels" :tab="t('alert.tabs.channels')">
+      <PageCard :title="t('alert.channelsTab.title')" :subtitle="t('alert.channelsTab.subtitle')">
         <template #extra>
           <NButton type="primary" @click="openChannelCreate">
             <template #icon>
               <NIcon><AddOutline /></NIcon>
             </template>
-            添加渠道
+            {{ t('alert.channelsTab.create') }}
           </NButton>
         </template>
 
@@ -947,34 +949,34 @@ onMounted(() => {
     </NTabPane>
 
     <!-- ==================== Tab 3: 告警历史 ==================== -->
-    <NTabPane name="history" tab="告警历史">
-      <PageCard title="告警历史" subtitle="查看所有告警触发与恢复记录">
+    <NTabPane name="history" :tab="t('alert.tabs.history')">
+      <PageCard :title="t('alert.history.title')" :subtitle="t('alert.history.subtitle')">
         <!-- 筛选栏 -->
         <div class="history-filter">
           <NSpace size="medium" align="center">
             <div class="history-filter__item">
-              <span class="history-filter__label">规则</span>
+              <span class="history-filter__label">{{ t('alert.history.filterRule') }}</span>
               <NSelect
                 v-model:value="historyFilterRule"
                 :options="ruleOptions"
-                placeholder="全部规则"
+                :placeholder="t('alert.history.filterRulePlaceholder')"
                 clearable
                 style="width: 200px"
                 @update:value="handleHistoryFilter"
               />
             </div>
             <div class="history-filter__item">
-              <span class="history-filter__label">状态</span>
+              <span class="history-filter__label">{{ t('alert.history.filterStatus') }}</span>
               <NSelect
                 v-model:value="historyFilterStatus"
                 :options="historyStatusOptions"
-                placeholder="全部状态"
+                :placeholder="t('alert.history.filterStatusPlaceholder')"
                 clearable
                 style="width: 140px"
                 @update:value="handleHistoryFilter"
               />
             </div>
-            <NButton size="small" @click="handleHistoryReset">重置</NButton>
+            <NButton size="small" @click="handleHistoryReset">{{ t('alert.history.reset') }}</NButton>
           </NSpace>
         </div>
 
@@ -986,8 +988,8 @@ onMounted(() => {
         >
           <template #empty>
             <div class="history-empty">
-              <p>暂无告警记录</p>
-              <span>当配置的规则被触发时，记录会显示在这里</span>
+              <p>{{ t('alert.history.empty') }}</p>
+              <span>{{ t('alert.history.emptyHint') }}</span>
             </div>
           </template>
         </DataTable>
@@ -995,7 +997,7 @@ onMounted(() => {
         <!-- 展开行错误信息 -->
         <div v-for="row in history" :key="`expand-${row.id}`">
           <div v-if="expandedHistoryId === row.id && row.notification_error" class="history-expand-row">
-            <span class="history-expand__label">通知错误：</span>
+            <span class="history-expand__label">{{ t('alert.history.errorLabel') }}</span>
             <span class="history-expand__error mono">{{ row.notification_error }}</span>
           </div>
         </div>
@@ -1006,54 +1008,54 @@ onMounted(() => {
   <!-- ==================== 规则创建/编辑对话框 ==================== -->
   <ModalForm
     :show="showRuleForm"
-    :title="ruleIsEdit ? '编辑规则' : '创建规则'"
+    :title="ruleIsEdit ? t('alert.rules.form.editTitle') : t('alert.rules.form.createTitle')"
     :loading="ruleFormLoading"
     :width="560"
     @update:show="(v: boolean) => (showRuleForm = v)"
     @submit="handleRuleFormSubmit"
   >
     <NForm ref="ruleFormRef" :model="ruleForm" :rules="ruleFormRules" label-placement="top">
-      <NFormItem label="规则名称" path="name">
-        <NInput v-model:value="ruleForm.name" placeholder="例如：CPU 使用率过高" clearable />
+      <NFormItem :label="t('alert.rules.form.name')" path="name">
+        <NInput v-model:value="ruleForm.name" :placeholder="t('alert.rules.form.namePlaceholder')" clearable />
       </NFormItem>
 
       <NSpace size="medium" align="end" style="width: 100%">
-        <NFormItem label="指标类型" path="metric_type" style="flex: 1">
+        <NFormItem :label="t('alert.rules.form.metric')" path="metric_type" style="flex: 1">
           <NSelect v-model:value="ruleForm.metric_type" :options="metricOptions" />
         </NFormItem>
-        <NFormItem label="条件" path="condition" style="flex: 1">
+        <NFormItem :label="t('alert.rules.form.condition')" path="condition" style="flex: 1">
           <NSelect v-model:value="ruleForm.condition" :options="conditionOptions" />
         </NFormItem>
-        <NFormItem label="阈值" path="threshold" style="flex: 1">
+        <NFormItem :label="t('alert.rules.form.threshold')" path="threshold" style="flex: 1">
           <NInput
             v-model:value="ruleForm.threshold"
-            :placeholder="`单位 ${metricUnitMap[ruleForm.metric_type]}`"
+            :placeholder="t('alert.rules.form.thresholdPlaceholder', { unit: metricUnitMap[ruleForm.metric_type] })"
           />
         </NFormItem>
       </NSpace>
 
-      <NFormItem label="持续时间（分钟）" path="duration">
-        <NInput v-model:value="ruleForm.duration" placeholder="默认 5 分钟" />
+      <NFormItem :label="t('alert.rules.form.duration')" path="duration">
+        <NInput v-model:value="ruleForm.duration" :placeholder="t('alert.rules.form.durationPlaceholder')" />
       </NFormItem>
 
-      <NFormItem label="通知渠道">
+      <NFormItem :label="t('alert.rules.form.channels')">
         <NCheckboxGroup v-model:value="ruleForm.channels">
           <NSpace size="medium" wrap>
             <NCheckbox v-for="ch in channelList" :key="ch.id" :value="String(ch.id)">
               {{ ch.name }}
-              <NTag size="tiny" type="default" :bordered="false" round style="margin-left: 4px">
+              <NTag size="tiny" type="default" :bordered="false" round style="margin-left: var(--space-1)">
                 {{ channelLabelMap[ch.type] }}
               </NTag>
             </NCheckbox>
           </NSpace>
         </NCheckboxGroup>
         <div v-if="channelList.length === 0" class="form-hint">
-          暂无可用渠道，请先在「通知渠道」中添加
+          {{ t('alert.rules.form.noChannels') }}
         </div>
       </NFormItem>
 
-      <NFormItem label="备注" path="remark">
-        <NInput v-model:value="ruleForm.remark" placeholder="可选备注信息" clearable />
+      <NFormItem :label="t('alert.rules.form.remark')" path="remark">
+        <NInput v-model:value="ruleForm.remark" :placeholder="t('alert.rules.form.remarkPlaceholder')" clearable />
       </NFormItem>
     </NForm>
   </ModalForm>
@@ -1061,24 +1063,24 @@ onMounted(() => {
   <!-- ==================== 渠道创建/编辑对话框 ==================== -->
   <ModalForm
     :show="showChannelForm"
-    :title="channelIsEdit ? '编辑渠道' : '添加渠道'"
+    :title="channelIsEdit ? t('alert.channelsTab.form.editTitle') : t('alert.channelsTab.form.createTitle')"
     :loading="channelFormLoading"
     :width="560"
     @update:show="(v: boolean) => (showChannelForm = v)"
     @submit="handleChannelFormSubmit"
   >
     <NForm ref="channelFormRef" :model="channelForm" :rules="channelFormRules" label-placement="top">
-      <NFormItem label="渠道名称" path="name">
-        <NInput v-model:value="channelForm.name" placeholder="例如：运维告警邮件" clearable />
+      <NFormItem :label="t('alert.channelsTab.form.name')" path="name">
+        <NInput v-model:value="channelForm.name" :placeholder="t('alert.channelsTab.form.namePlaceholder')" clearable />
       </NFormItem>
 
-      <NFormItem label="渠道类型" path="type">
+      <NFormItem :label="t('alert.channelsTab.form.type')" path="type">
         <NSelect v-model:value="channelForm.type" :options="channelTypeOptions" />
       </NFormItem>
 
       <!-- 邮件 -->
       <template v-if="channelForm.type === 'email'">
-        <NFormItem label="收件人（多个邮箱用逗号分隔）">
+        <NFormItem :label="t('alert.channelsTab.form.emailRecipients')">
           <NInput
             v-model:value="channelForm.email_recipients"
             type="textarea"
@@ -1086,7 +1088,7 @@ onMounted(() => {
             :rows="2"
           />
         </NFormItem>
-        <div class="form-hint">SMTP 服务器配置在系统设置中管理</div>
+        <div class="form-hint">{{ t('alert.channelsTab.form.emailHint') }}</div>
       </template>
 
       <!-- 钉钉 -->
@@ -1094,7 +1096,7 @@ onMounted(() => {
         <NFormItem label="Webhook URL">
           <NInput v-model:value="channelForm.dingtalk_webhook" placeholder="https://oapi.dingtalk.com/robot/send?access_token=..." />
         </NFormItem>
-        <NFormItem label="加签密钥（可选）">
+        <NFormItem :label="t('alert.channelsTab.form.dingtalkSecret')">
           <NInput v-model:value="channelForm.dingtalk_secret" placeholder="SEC..." />
         </NFormItem>
       </template>
@@ -1118,8 +1120,8 @@ onMounted(() => {
         <NFormItem label="Bot Token">
           <NInput v-model:value="channelForm.telegram_bot_token" type="password" show-password-on="click" placeholder="123456:ABC-DEF..." />
         </NFormItem>
-        <NFormItem label="Chat ID">
-          <NInput v-model:value="channelForm.telegram_chat_id" placeholder="@channelname 或数字 ID" />
+        <NFormItem :label="t('alert.channelsTab.form.telegramChatId')">
+          <NInput v-model:value="channelForm.telegram_chat_id" :placeholder="t('alert.channelsTab.form.telegramChatIdPlaceholder')" />
         </NFormItem>
       </template>
 
@@ -1128,7 +1130,7 @@ onMounted(() => {
         <NFormItem label="URL">
           <NInput v-model:value="channelForm.webhook_url" placeholder="https://example.com/webhook" />
         </NFormItem>
-        <NFormItem label="请求头（JSON 格式，可选）">
+        <NFormItem :label="t('alert.channelsTab.form.webhookHeaders')">
           <NInput
             v-model:value="channelForm.webhook_headers"
             type="textarea"
@@ -1138,7 +1140,7 @@ onMounted(() => {
         </NFormItem>
       </template>
 
-      <NFormItem label="启用">
+      <NFormItem :label="t('alert.channelsTab.form.enabled')">
         <NSwitch v-model:value="channelForm.enabled" />
       </NFormItem>
     </NForm>
@@ -1147,9 +1149,9 @@ onMounted(() => {
   <!-- ==================== 规则删除确认 ==================== -->
   <ConfirmDialog
     :show="showRuleDelete"
-    title="删除规则"
-    :content="`确定要删除规则「${ruleDeleteName}」吗？此操作不可撤销。`"
-    confirm-text="删除"
+    :title="t('alert.rules.deleteConfirm.title')"
+    :content="t('alert.rules.deleteConfirm.content', { name: ruleDeleteName })"
+    :confirm-text="t('alert.rules.deleteConfirm.confirm')"
     type="error"
     :loading="ruleDeleteLoading"
     @update:show="(v: boolean) => (showRuleDelete = v)"
@@ -1159,9 +1161,9 @@ onMounted(() => {
   <!-- ==================== 渠道删除确认 ==================== -->
   <ConfirmDialog
     :show="showChannelDelete"
-    title="删除渠道"
-    :content="`确定要删除渠道「${channelDeleteName}」吗？关联的规则将无法通过此渠道发送通知。`"
-    confirm-text="删除"
+    :title="t('alert.channelsTab.deleteConfirm.title')"
+    :content="t('alert.channelsTab.deleteConfirm.content', { name: channelDeleteName })"
+    :confirm-text="t('alert.channelsTab.deleteConfirm.confirm')"
     type="error"
     :loading="channelDeleteLoading"
     @update:show="(v: boolean) => (showChannelDelete = v)"
@@ -1184,7 +1186,7 @@ onMounted(() => {
 
 .rule-name__remark {
   font-size: var(--fs-caption);
-  color: var(--faint);
+  color: var(--text-quaternary);
 }
 
 .rule-condition {
@@ -1269,16 +1271,9 @@ onMounted(() => {
 }
 
 .history-empty span {
-  color: var(--faint);
+  color: var(--text-quaternary);
   font-size: var(--fs-caption);
 }
 
-/* 表单提示 */
-.form-hint {
-  font-size: var(--fs-caption);
-  color: var(--faint);
-  margin-top: calc(var(--space-2) * -1);
-  margin-bottom: var(--space-4);
-  padding-left: 2px;
-}
+/* .form-hint 已收敛为全局样式（src/styles/main.css），此处不再重复定义 */
 </style>

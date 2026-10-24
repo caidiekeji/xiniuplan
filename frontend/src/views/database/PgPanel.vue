@@ -1,16 +1,13 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch, h } from 'vue'
-import { useMessage } from 'naive-ui'
+import { useI18n } from 'vue-i18n'
+import { useMessage } from '@/composables/useMessage'
 import {
   NButton, NSpace, NIcon, NTabs, NTabPane, NInput, NSelect,
   NCheckboxGroup, NCheckbox, NFormItem, NEmpty, NSpin, NAlert, NTag
 } from 'naive-ui'
 import type { DataTableColumns } from 'naive-ui'
-import {
-  AddOutline, TrashOutline, PlayOutline, RefreshOutline,
-  ConstructOutline, PeopleOutline, FileTrayFullOutline,
-  ChevronForwardOutline, CloseOutline, ServerOutline, ShieldHalfOutline
-} from '@vicons/ionicons5'
+import { AddOutline, TrashOutline, PlayOutline, RefreshOutline, ConstructOutline, FileTrayFullOutline, ChevronForwardOutline, CloseOutline, ServerOutline, ShieldHalfOutline } from '@vicons/ionicons5'
 import {
   DataTable, ModalForm, ConfirmDialog, CodeEditor
 } from '@/components'
@@ -24,6 +21,7 @@ const props = defineProps<{
   instanceId: number
 }>()
 
+const { t } = useI18n()
 const message = useMessage()
 
 /* ==================== 辅助函数 ==================== */
@@ -56,7 +54,8 @@ function rowsToObjects(columns: string[], rows: any[][]): Record<string, any>[] 
   })
 }
 
-function buildDynamicColumns(columns: string[]): DataTableColumns {
+function buildDynamicColumns(columns: string[] | null | undefined): DataTableColumns {
+  if (!Array.isArray(columns)) return []
   return columns.map(col => ({ title: col, key: col }))
 }
 
@@ -79,7 +78,7 @@ async function loadDatabases() {
       selectedDbName.value = databases.value[0].name
     }
   } catch (e: any) {
-    message.error(e.message || '加载数据库列表失败')
+    message.error(e.message || t('pgPanel.loadDatabasesFailed'))
   } finally {
     databasesLoading.value = false
   }
@@ -105,7 +104,7 @@ async function loadTables() {
     const res = await pgApi.getTables(props.instanceId, selectedDbName.value)
     tables.value = res.data
   } catch (e: any) {
-    message.error(e.message || '加载表列表失败')
+    message.error(e.message || t('pgPanel.loadTablesFailed'))
   } finally {
     tablesLoading.value = false
   }
@@ -122,15 +121,15 @@ async function toggleTableSchema(tableName: string) {
     const res = await pgApi.getTableSchema(props.instanceId, selectedDbName.value, tableName)
     tableSchema.value = res.data
   } catch (e: any) {
-    message.error(e.message || '加载表结构失败')
+    message.error(e.message || t('pgPanel.loadSchemaFailed'))
   } finally {
     tableSchemaLoading.value = false
   }
 }
 
-const pgTableColumns: DataTableColumns = [
+const pgTableColumns = computed<DataTableColumns>(() => [
   {
-    title: '表名', key: 'name', width: 220,
+    title: t('pgPanel.columns.tableName'), key: 'name', width: 220,
     render: (row: any) => h(NButton, {
       text: true, size: 'small', onClick: () => toggleTableSchema(row.name)
     }, {
@@ -143,34 +142,34 @@ const pgTableColumns: DataTableColumns = [
     })
   },
   {
-    title: '行数（估算）', key: 'rows_estimate', width: 120,
+    title: t('pgPanel.columns.rowsEstimate'), key: 'rows_estimate', width: 120,
     render: (row: any) => monoEl(row.rows_estimate?.toLocaleString() ?? '-')
   },
-  { title: '大小', key: 'size', width: 120 },
+  { title: t('pgPanel.columns.size'), key: 'size', width: 120 },
   {
-    title: '操作', key: 'actions', width: 160,
+    title: t('pgPanel.columns.actions'), key: 'actions', width: 160,
     render: (row: any) => btnGroup([
-      iconBtn({ text: '结构', icon: ConstructOutline, onClick: () => toggleTableSchema(row.name) }),
-      iconBtn({ text: '数据', icon: ServerOutline, type: 'primary', onClick: () => viewTableData(row.name) })
+      iconBtn({ text: t('pgPanel.columns.structure'), icon: ConstructOutline, onClick: () => toggleTableSchema(row.name) }),
+      iconBtn({ text: t('pgPanel.columns.data'), icon: ServerOutline, type: 'primary', onClick: () => viewTableData(row.name) })
     ])
   }
-]
+])
 
-const pgStructureColumns: DataTableColumns = [
-  { title: '列名', key: 'name', width: 180, render: (row: any) => monoEl(row.name) },
-  { title: '类型', key: 'type', width: 160, render: (row: any) => monoEl(row.type) },
+const pgStructureColumns = computed<DataTableColumns>(() => [
+  { title: t('pgPanel.columns.columnName'), key: 'name', width: 180, render: (row: any) => monoEl(row.name) },
+  { title: t('pgPanel.columns.type'), key: 'type', width: 160, render: (row: any) => monoEl(row.type) },
   {
-    title: '可空', key: 'nullable', width: 80,
+    title: t('pgPanel.columns.nullable'), key: 'nullable', width: 80,
     render: (row: any) => row.nullable ? 'YES' : 'NO'
   },
-  { title: '默认值', key: 'default', width: 160, render: (row: any) => row.default ?? '-' },
+  { title: t('pgPanel.columns.defaultValue'), key: 'default', width: 160, render: (row: any) => row.default ?? '-' },
   {
-    title: '主键', key: 'is_primary', width: 80,
+    title: t('pgPanel.columns.primaryKey'), key: 'is_primary', width: 80,
     render: (row: any) => row.is_primary
       ? h(NTag, { size: 'small', type: 'warning', bordered: false }, { default: () => 'PK' })
       : '-'
   }
-]
+])
 
 /* --- 表数据 --- */
 
@@ -202,7 +201,7 @@ async function loadTableData() {
     tableDataRows.value = rowsToObjects(res.data.columns, res.data.rows)
     tableDataTotal.value = res.data.total
   } catch (e: any) {
-    message.error(e.message || '加载表数据失败')
+    message.error(e.message || t('pgPanel.loadTableDataFailed'))
   } finally {
     tableDataLoading.value = false
   }
@@ -247,18 +246,18 @@ function openCreateDb() {
 }
 
 async function submitCreateDb() {
-  if (!pgDbForm.value.name) { message.warning('请输入数据库名'); return }
+  if (!pgDbForm.value.name) { message.warning(t('pgPanel.createDb.nameRequired')); return }
   createDbLoading.value = true
   try {
     const data: CreatePgDatabaseData = { ...pgDbForm.value }
     if (!data.owner) delete data.owner
     await pgApi.createDatabase(props.instanceId, data)
-    message.success('数据库创建成功')
+    message.success(t('pgPanel.createDb.success'))
     createDbModal.value = false
     await loadDatabases()
     selectedDbName.value = pgDbForm.value.name
   } catch (e: any) {
-    message.error(e.message || '创建失败')
+    message.error(e.message || t('pgPanel.createFailed'))
   } finally {
     createDbLoading.value = false
   }
@@ -280,14 +279,14 @@ async function doDeleteDb() {
   deleteDbLoading.value = true
   try {
     await pgApi.dropDatabase(props.instanceId, targetDbName.value)
-    message.success(`数据库 ${targetDbName.value} 已删除`)
+    message.success(t('pgPanel.dbDeleted', { name: targetDbName.value }))
     deleteDbConfirm.value = false
     if (selectedDbName.value === targetDbName.value) {
       selectedDbName.value = ''
     }
     await loadDatabases()
   } catch (e: any) {
-    message.error(e.message || '删除失败')
+    message.error(e.message || t('pgPanel.deleteFailed'))
   } finally {
     deleteDbLoading.value = false
   }
@@ -304,32 +303,32 @@ async function loadUsers() {
     const res = await pgApi.getUsers(props.instanceId)
     users.value = res.data
   } catch (e: any) {
-    message.error(e.message || '加载用户列表失败')
+    message.error(e.message || t('pgPanel.loadUsersFailed'))
   } finally {
     usersLoading.value = false
   }
 }
 
-const pgUserColumns: DataTableColumns = [
-  { title: '用户名', key: 'username', width: 200, render: (row: any) => monoEl(row.username) },
+const pgUserColumns = computed<DataTableColumns>(() => [
+  { title: t('pgPanel.columns.username'), key: 'username', width: 200, render: (row: any) => monoEl(row.username) },
   {
-    title: '属性', key: 'attributes',
+    title: t('pgPanel.columns.attributes'), key: 'attributes',
     render: (row: any) => h(NSpace, { size: 4 }, {
       default: () => (row.attributes || []).map((attr: string) =>
         h(NTag, { size: 'small', type: 'info', bordered: false }, { default: () => attr })
       )
     })
   },
-  { title: '有效时间', key: 'valid_until', width: 180, render: (row: any) => row.valid_until || '永久' },
+  { title: t('pgPanel.columns.validUntil'), key: 'valid_until', width: 180, render: (row: any) => row.valid_until || t('pgPanel.columns.permanent') },
   {
-    title: '操作', key: 'actions', width: 280,
+    title: t('pgPanel.columns.actions'), key: 'actions', width: 280,
     render: (row: any) => btnGroup([
-      iconBtn({ text: '授权', icon: ConstructOutline, type: 'primary', onClick: () => openGrantUser(row) }),
-      iconBtn({ text: '回收权限', icon: ShieldHalfOutline, type: 'warning', onClick: () => openRevokeUser(row) }),
-      iconBtn({ text: '删除', icon: TrashOutline, type: 'error', onClick: () => confirmDeleteUser(row) })
+      iconBtn({ text: t('pgPanel.columns.grant'), icon: ConstructOutline, type: 'primary', onClick: () => openGrantUser(row) }),
+      iconBtn({ text: t('pgPanel.columns.revoke'), icon: ShieldHalfOutline, type: 'warning', onClick: () => openRevokeUser(row) }),
+      iconBtn({ text: t('pgPanel.delete'), icon: TrashOutline, type: 'error', onClick: () => confirmDeleteUser(row) })
     ])
   }
-]
+])
 
 /* --- 创建用户 --- */
 
@@ -349,8 +348,8 @@ function openCreateUser() {
 }
 
 async function submitCreateUser() {
-  if (!pgUserForm.value.username) { message.warning('请输入用户名'); return }
-  if (!pgUserForm.value.password) { message.warning('请输入密码'); return }
+  if (!pgUserForm.value.username) { message.warning(t('pgPanel.createUser.nameRequired')); return }
+  if (!pgUserForm.value.password) { message.warning(t('pgPanel.createUser.passwordRequired')); return }
   createUserLoading.value = true
   try {
     await pgApi.createUser(props.instanceId, {
@@ -358,11 +357,11 @@ async function submitCreateUser() {
       password: pgUserForm.value.password,
       attributes: pgUserForm.value.attributes
     })
-    message.success('用户创建成功')
+    message.success(t('pgPanel.createUser.success'))
     createUserModal.value = false
     loadUsers()
   } catch (e: any) {
-    message.error(e.message || '创建失败')
+    message.error(e.message || t('pgPanel.createFailed'))
   } finally {
     createUserLoading.value = false
   }
@@ -384,11 +383,11 @@ async function doDeleteUser() {
   deleteUserLoading.value = true
   try {
     await pgApi.dropUser(props.instanceId, targetUser.value.username)
-    message.success(`用户 ${targetUser.value.username} 已删除`)
+    message.success(t('pgPanel.userDeleted', { name: targetUser.value.username }))
     deleteUserConfirm.value = false
     loadUsers()
   } catch (e: any) {
-    message.error(e.message || '删除失败')
+    message.error(e.message || t('pgPanel.deleteFailed'))
   } finally {
     deleteUserLoading.value = false
   }
@@ -418,14 +417,14 @@ function openGrantUser(row: any) {
 
 async function submitGrantUser() {
   if (!grantTargetUsername.value) return
-  if (!grantForm.value.db) { message.warning('请选择数据库'); return }
+  if (!grantForm.value.db) { message.warning(t('pgPanel.selectDb')); return }
   grantUserLoading.value = true
   try {
     await pgApi.grantUser(props.instanceId, grantTargetUsername.value, grantForm.value)
-    message.success('授权成功')
+    message.success(t('pgPanel.grant.success'))
     grantUserModal.value = false
   } catch (e: any) {
-    message.error(e.message || '授权失败')
+    message.error(e.message || t('pgPanel.grant.failed'))
   } finally {
     grantUserLoading.value = false
   }
@@ -448,14 +447,14 @@ function openRevokeUser(row: any) {
 
 async function submitRevokeUser() {
   if (!grantTargetUsername.value) return
-  if (!revokeForm.value.db) { message.warning('请选择数据库'); return }
+  if (!revokeForm.value.db) { message.warning(t('pgPanel.selectDb')); return }
   revokeUserLoading.value = true
   try {
     await pgApi.revokePgUser(props.instanceId, grantTargetUsername.value, revokeForm.value.db)
-    message.success(`已回收 ${grantTargetUsername.value} 在 ${revokeForm.value.db} 上的权限`)
+    message.success(t('pgPanel.revoke.success', { user: grantTargetUsername.value, db: revokeForm.value.db }))
     revokeUserModal.value = false
   } catch (e: any) {
-    message.error(e.message || '回收权限失败')
+    message.error(e.message || t('pgPanel.revoke.failed'))
   } finally {
     revokeUserLoading.value = false
   }
@@ -463,7 +462,7 @@ async function submitRevokeUser() {
 
 /* ==================== Tab 3: SQL 执行器 ==================== */
 
-const sqlText = ref('-- 在此输入 SQL 语句\nSELECT 1;')
+const sqlText = ref(t('pgPanel.sql.defaultSql'))
 const sqlLoading = ref(false)
 const allowDestructive = ref(false)
 const sqlSelectedDb = ref('')
@@ -482,8 +481,8 @@ watch(selectedDbName, (db) => {
 })
 
 async function executeSql() {
-  if (!sqlSelectedDb.value) { message.warning('请选择数据库'); return }
-  if (!sqlText.value.trim()) { message.warning('请输入 SQL 语句'); return }
+  if (!sqlSelectedDb.value) { message.warning(t('pgPanel.selectDb')); return }
+  if (!sqlText.value.trim()) { message.warning(t('pgPanel.sql.enterSql')); return }
   sqlLoading.value = true
   sqlResult.value = null
   try {
@@ -503,10 +502,10 @@ async function executeSql() {
     if (res.data.error) {
       message.error(res.data.error)
     } else {
-      message.success('执行完成')
+      message.success(t('pgPanel.sql.executed'))
     }
   } catch (e: any) {
-    message.error(e.message || '执行失败')
+    message.error(e.message || t('pgPanel.sql.failed'))
   } finally {
     sqlLoading.value = false
   }
@@ -532,14 +531,14 @@ watch(activeSubTab, (tab) => {
 <template>
   <NTabs v-model:value="activeSubTab" type="line" animated>
     <!-- ==================== Tab 1: 库表管理 ==================== -->
-    <NTabPane name="schema" tab="库表管理">
+    <NTabPane name="schema" :tab="t('pgPanel.tabs.schema')">
       <div class="tab-toolbar">
         <NSpace>
           <NButton type="primary" @click="openCreateDb">
-            <template #icon><NIcon><AddOutline /></NIcon></template>创建数据库
+            <template #icon><NIcon><AddOutline /></NIcon></template>{{ t('pgPanel.createDb.title') }}
           </NButton>
           <NButton @click="loadDatabases" :loading="databasesLoading">
-            <template #icon><NIcon><RefreshOutline /></NIcon></template>刷新
+            <template #icon><NIcon><RefreshOutline /></NIcon></template>{{ t('pgPanel.refresh') }}
           </NButton>
         </NSpace>
       </div>
@@ -549,11 +548,11 @@ watch(activeSubTab, (tab) => {
         <div class="pg-sidebar">
           <div class="pg-sidebar__title">
             <NIcon :size="14"><FileTrayFullOutline /></NIcon>
-            <span>数据库</span>
+            <span>{{ t('pgPanel.sidebarTitle') }}</span>
           </div>
           <NSpin :show="databasesLoading">
             <div v-if="databases.length === 0 && !databasesLoading" class="pg-sidebar__empty">
-              暂无数据库
+              {{ t('pgPanel.noDatabases') }}
             </div>
             <div
               v-for="db in databases"
@@ -580,7 +579,7 @@ watch(activeSubTab, (tab) => {
         <!-- 右侧表列表 -->
         <div class="pg-main">
           <div v-if="!selectedDbName" class="empty-hint">
-            <NEmpty description="请选择左侧数据库" />
+            <NEmpty :description="t('pgPanel.selectDbLeft')" />
           </div>
 
           <template v-else>
@@ -588,7 +587,7 @@ watch(activeSubTab, (tab) => {
               <span class="mono pg-main__dbname">{{ selectedDbName }}</span>
               <NSpace>
                 <NButton size="small" @click="loadTables" :loading="tablesLoading">
-                  <template #icon><NIcon><RefreshOutline /></NIcon></template>刷新
+                  <template #icon><NIcon><RefreshOutline /></NIcon></template>{{ t('pgPanel.refresh') }}
                 </NButton>
               </NSpace>
             </div>
@@ -601,14 +600,14 @@ watch(activeSubTab, (tab) => {
             />
 
             <div v-if="tables.length === 0 && !tablesLoading" class="empty-hint">
-              <NEmpty description="该数据库暂无表" />
+              <NEmpty :description="t('pgPanel.noTables')" />
             </div>
 
             <!-- 展开的表结构 -->
             <div v-if="expandedTableName && tableSchema" class="expanded-section">
               <div class="expanded-section__header">
                 <NIcon :size="14"><ConstructOutline /></NIcon>
-                <span class="mono">表结构: {{ expandedTableName }}</span>
+                <span class="mono">{{ t('pgPanel.tableSchema', { name: expandedTableName }) }}</span>
                 <NButton size="tiny" text @click="expandedTableName = ''">
                   <template #icon><NIcon><CloseOutline /></NIcon></template>
                 </NButton>
@@ -622,7 +621,7 @@ watch(activeSubTab, (tab) => {
                 />
               </NSpin>
               <div v-if="tableSchema.indexes && tableSchema.indexes.length > 0" class="pg-indexes">
-                <div class="pg-indexes__title">索引</div>
+                <div class="pg-indexes__title">{{ t('pgPanel.indexes') }}</div>
                 <div v-for="idx in tableSchema.indexes" :key="idx.name" class="pg-indexes__item">
                   <span class="mono pg-indexes__name">{{ idx.name }}</span>
                   <span class="pg-indexes__def">{{ idx.definition }}</span>
@@ -634,7 +633,7 @@ watch(activeSubTab, (tab) => {
             <div v-if="tableDataVisible" class="expanded-section">
               <div class="expanded-section__header">
                 <NIcon :size="14"><ServerOutline /></NIcon>
-                <span class="mono">表数据: {{ tableDataTableName }}</span>
+                <span class="mono">{{ t('pgPanel.tableData', { name: tableDataTableName }) }}</span>
                 <NButton size="tiny" text @click="tableDataVisible = false">
                   <template #icon><NIcon><CloseOutline /></NIcon></template>
                 </NButton>
@@ -653,14 +652,14 @@ watch(activeSubTab, (tab) => {
     </NTabPane>
 
     <!-- ==================== Tab 2: 用户权限 ==================== -->
-    <NTabPane name="users" tab="用户权限">
+    <NTabPane name="users" :tab="t('pgPanel.tabs.users')">
       <div class="tab-toolbar">
         <NSpace>
           <NButton type="primary" @click="openCreateUser">
-            <template #icon><NIcon><AddOutline /></NIcon></template>创建用户
+            <template #icon><NIcon><AddOutline /></NIcon></template>{{ t('pgPanel.createUser.create') }}
           </NButton>
           <NButton @click="loadUsers" :loading="usersLoading">
-            <template #icon><NIcon><RefreshOutline /></NIcon></template>刷新
+            <template #icon><NIcon><RefreshOutline /></NIcon></template>{{ t('pgPanel.refresh') }}
           </NButton>
         </NSpace>
       </div>
@@ -672,31 +671,31 @@ watch(activeSubTab, (tab) => {
         :pagination="false"
       />
       <div v-if="users.length === 0 && !usersLoading" class="empty-hint">
-        <NEmpty description="暂无用户，点击上方按钮创建" />
+        <NEmpty :description="t('pgPanel.noUsers')" />
       </div>
     </NTabPane>
 
     <!-- ==================== Tab 3: SQL 执行器 ==================== -->
-    <NTabPane name="sql" tab="SQL 执行器">
+    <NTabPane name="sql" :tab="t('pgPanel.tabs.sql')">
       <div class="tab-toolbar">
         <NSpace>
           <NSelect
             v-model:value="sqlSelectedDb"
-            placeholder="选择数据库"
+            :placeholder="t('pgPanel.selectDbPlaceholder')"
             :options="dbOptionsForSql"
             style="width: var(--input-lg)"
           />
           <NButton type="primary" :loading="sqlLoading" :disabled="!sqlSelectedDb" @click="executeSql">
-            <template #icon><NIcon><PlayOutline /></NIcon></template>执行
+            <template #icon><NIcon><PlayOutline /></NIcon></template>{{ t('pgPanel.execute') }}
           </NButton>
           <NCheckbox v-model:checked="allowDestructive">
-            <span class="checkbox-label">允许危险操作</span>
+            <span class="checkbox-label">{{ t('pgPanel.allowDestructive') }}</span>
           </NCheckbox>
         </NSpace>
       </div>
 
       <div v-if="!sqlSelectedDb" class="empty-hint">
-        <NEmpty description="请先选择数据库" />
+        <NEmpty :description="t('pgPanel.selectDbFirst')" />
       </div>
 
       <template v-else>
@@ -714,12 +713,12 @@ watch(activeSubTab, (tab) => {
           <div class="sql-result__header">
             <NSpace>
               <NTag size="small" :type="sqlResult.error ? 'error' : 'success'" bordered>
-                {{ sqlResult.error ? '执行失败' : '执行成功' }}
+                {{ sqlResult.error ? t('pgPanel.sql.failed') : t('pgPanel.sql.success') }}
               </NTag>
               <span class="mono sql-result__meta">
-                耗时 <span class="num">{{ sqlResult.duration_ms }}</span> ms
+                {{ t('pgPanel.sql.duration', { ms: sqlResult.duration_ms }) }}
                 <template v-if="sqlResult.affected_rows !== undefined">
-                  · 影响 <span class="num">{{ sqlResult.affected_rows }}</span> 行
+                  · {{ t('pgPanel.sql.affected', { rows: sqlResult.affected_rows }) }}
                 </template>
               </span>
             </NSpace>
@@ -739,7 +738,7 @@ watch(activeSubTab, (tab) => {
           </div>
 
           <div v-else-if="!sqlResult.error && !sqlResult.columns" class="sql-result__empty">
-            无返回结果集（非 SELECT 语句）
+            {{ t('pgPanel.sql.noResultSet') }}
           </div>
         </div>
       </template>
@@ -751,38 +750,38 @@ watch(activeSubTab, (tab) => {
   <!-- 创建数据库 -->
   <ModalForm
     v-model:show="createDbModal"
-    title="创建数据库"
+    :title="t('pgPanel.createDb.title')"
     :loading="createDbLoading"
     @submit="submitCreateDb"
   >
-    <NFormItem label="数据库名">
-      <NInput v-model:value="pgDbForm.name" placeholder="例如: myapp_db" />
+    <NFormItem :label="t('pgPanel.createDb.nameLabel')">
+      <NInput v-model:value="pgDbForm.name" :placeholder="t('pgPanel.createDb.namePlaceholder')" />
     </NFormItem>
-    <NFormItem label="编码">
+    <NFormItem :label="t('pgPanel.createDb.encodingLabel')">
       <NSelect v-model:value="pgDbForm.encoding" :options="encodingOptions" />
     </NFormItem>
-    <NFormItem label="排序规则">
+    <NFormItem :label="t('pgPanel.createDb.collateLabel')">
       <NSelect v-model:value="pgDbForm.collate" :options="collateOptions" />
     </NFormItem>
     <NFormItem label="Owner">
-      <NInput v-model:value="pgDbForm.owner" placeholder="留空使用当前用户" />
+      <NInput v-model:value="pgDbForm.owner" :placeholder="t('pgPanel.createDb.ownerPlaceholder')" />
     </NFormItem>
   </ModalForm>
 
   <!-- 创建用户 -->
   <ModalForm
     v-model:show="createUserModal"
-    title="创建数据库用户"
+    :title="t('pgPanel.createUser.title')"
     :loading="createUserLoading"
     @submit="submitCreateUser"
   >
-    <NFormItem label="用户名">
-      <NInput v-model:value="pgUserForm.username" placeholder="例如: app_user" />
+    <NFormItem :label="t('pgPanel.createUser.nameLabel')">
+      <NInput v-model:value="pgUserForm.username" :placeholder="t('pgPanel.createUser.namePlaceholder')" />
     </NFormItem>
-    <NFormItem label="密码">
-      <NInput v-model:value="pgUserForm.password" type="password" show-password-on="click" placeholder="请输入密码" />
+    <NFormItem :label="t('pgPanel.createUser.passwordLabel')">
+      <NInput v-model:value="pgUserForm.password" type="password" show-password-on="click" :placeholder="t('pgPanel.createUser.passwordPlaceholder')" />
     </NFormItem>
-    <NFormItem label="角色属性">
+    <NFormItem :label="t('pgPanel.createUser.roleAttributesLabel')">
       <NCheckboxGroup v-model:value="pgUserForm.attributes">
         <NSpace>
           <NCheckbox v-for="attr in pgRoleAttributes" :key="attr" :value="attr">{{ attr }}</NCheckbox>
@@ -794,14 +793,14 @@ watch(activeSubTab, (tab) => {
   <!-- 授权 -->
   <ModalForm
     v-model:show="grantUserModal"
-    :title="`授权用户: ${grantTargetUsername}`"
+    :title="t('pgPanel.grant.title', { name: grantTargetUsername })"
     :loading="grantUserLoading"
     @submit="submitGrantUser"
   >
-    <NFormItem label="选择数据库">
-      <NSelect v-model:value="grantForm.db" :options="dbOptionsForGrant" placeholder="选择数据库" />
+    <NFormItem :label="t('pgPanel.selectDbLabel')">
+      <NSelect v-model:value="grantForm.db" :options="dbOptionsForGrant" :placeholder="t('pgPanel.selectDbPlaceholder')" />
     </NFormItem>
-    <NFormItem label="权限">
+    <NFormItem :label="t('pgPanel.grant.privilegesLabel')">
       <NCheckboxGroup v-model:value="grantForm.privileges">
         <NSpace>
           <NCheckbox v-for="p in pgPrivilegeOptions" :key="p" :value="p">{{ p }}</NCheckbox>
@@ -813,12 +812,12 @@ watch(activeSubTab, (tab) => {
   <!-- 回收权限 -->
   <ModalForm
     v-model:show="revokeUserModal"
-    :title="`回收权限: ${grantTargetUsername}`"
+    :title="t('pgPanel.revoke.title', { name: grantTargetUsername })"
     :loading="revokeUserLoading"
     @submit="submitRevokeUser"
   >
-    <NFormItem label="选择数据库">
-      <NSelect v-model:value="revokeForm.db" :options="dbOptionsForGrant" placeholder="选择要回收权限的数据库" />
+    <NFormItem :label="t('pgPanel.selectDbLabel')">
+      <NSelect v-model:value="revokeForm.db" :options="dbOptionsForGrant" :placeholder="t('pgPanel.revoke.dbPlaceholder')" />
     </NFormItem>
   </ModalForm>
 
@@ -826,20 +825,20 @@ watch(activeSubTab, (tab) => {
 
   <ConfirmDialog
     v-model:show="deleteDbConfirm"
-    title="删除数据库"
-    :content="`确定要删除数据库「${targetDbName}」吗？此操作不可恢复。`"
+    :title="t('pgPanel.deleteDb.title')"
+    :content="t('pgPanel.deleteDb.content', { name: targetDbName })"
     type="error"
-    confirm-text="删除"
+    :confirm-text="t('pgPanel.delete')"
     :loading="deleteDbLoading"
     @confirm="doDeleteDb"
   />
 
   <ConfirmDialog
     v-model:show="deleteUserConfirm"
-    title="删除用户"
-    :content="`确定要删除用户「${targetUser?.username}」吗？`"
+    :title="t('pgPanel.deleteUser.title')"
+    :content="t('pgPanel.deleteUser.content', { name: targetUser?.username ?? '' })"
     type="error"
-    confirm-text="删除"
+    :confirm-text="t('pgPanel.delete')"
     :loading="deleteUserLoading"
     @confirm="doDeleteUser"
   />
@@ -891,7 +890,7 @@ watch(activeSubTab, (tab) => {
 }
 
 .pg-sidebar__empty {
-  color: var(--faint);
+  color: var(--text-quaternary);
   font-size: var(--fs-caption);
   text-align: center;
   padding: var(--space-4) 0;
@@ -1008,7 +1007,7 @@ watch(activeSubTab, (tab) => {
 }
 
 .pg-indexes__def {
-  color: var(--faint);
+  color: var(--text-quaternary);
   font-family: var(--font-mono);
 }
 
@@ -1038,7 +1037,7 @@ watch(activeSubTab, (tab) => {
 
 .sql-result__meta {
   font-size: var(--fs-caption);
-  color: var(--faint);
+  color: var(--text-quaternary);
 }
 
 .sql-result__error {
@@ -1052,7 +1051,7 @@ watch(activeSubTab, (tab) => {
 .sql-result__empty {
   padding: var(--space-6);
   text-align: center;
-  color: var(--faint);
+  color: var(--text-quaternary);
   font-size: var(--fs-caption);
 }
 

@@ -57,6 +57,22 @@ func (m *NotifierManager) Send(channel model.AlertChannel, title, content string
 	return n.Send(channel, title, content)
 }
 
+// SendToAll 向所有启用的渠道广播（拨测/防篡改/部署结果等场景通用）
+func (m *NotifierManager) SendToAll(title, content string) error {
+	var channels []model.AlertChannel
+	if err := m.db.Where("enabled = ?", true).Find(&channels).Error; err != nil {
+		return err
+	}
+	if len(channels) == 0 {
+		return fmt.Errorf("无可用通知渠道")
+	}
+	ids := make([]string, 0, len(channels))
+	for _, ch := range channels {
+		ids = append(ids, strconv.Itoa(int(ch.ID)))
+	}
+	return m.SendByIDs(ids, title, content)
+}
+
 // SendByIDs 通过渠道ID列表批量发送通知，返回错误汇总
 func (m *NotifierManager) SendByIDs(channelIDs []string, title, content string) error {
 	if len(channelIDs) == 0 {
@@ -169,6 +185,18 @@ func (e *EmailNotifier) getRecipients(channel model.AlertChannel) []string {
 		}
 	}
 	if v, ok := channel.Config["recipients"]; ok {
+		// 前端保存的是逗号分隔字符串，数组与字符串都要认
+		if s, ok := v.(string); ok && s != "" {
+			result := make([]string, 0)
+			for _, part := range strings.Split(s, ",") {
+				if p := strings.TrimSpace(part); p != "" {
+					result = append(result, p)
+				}
+			}
+			if len(result) > 0 {
+				return result
+			}
+		}
 		if arr, ok := v.([]interface{}); ok {
 			result := make([]string, 0, len(arr))
 			for _, item := range arr {
