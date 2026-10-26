@@ -20,7 +20,7 @@ services:
     environment:
       - TZ=Asia/Shanghai
       # 管理员初始密码（首次启动时生效，后续修改以数据库为准）
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin123}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:?请在 .env 文件中设置 ADMIN_PASSWORD（不得使用默认弱密码）}
     volumes:
       # 持久化数据：SQLite 数据库、JWT 密钥、网站文件根目录
       - panel-data:/app/data

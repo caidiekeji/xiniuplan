@@ -27,4 +27,10 @@ var DefaultSettings = []Setting{
 	{Key: "smtp_user", Value: "", Description: "SMTP 用户名"},
 	{Key: "smtp_pass", Value: "", Description: "SMTP 密码"},
 	{Key: "smtp_from", Value: "", Description: "SMTP 发件人"},
+	// Docker 镜像拉取地址：国内直连 Docker Hub 经常超时，需要可配加速源；
+	// 私有仓库（Harbor / ACR）还需地址与账号。
+	{Key: "docker_registry_mirrors", Value: "", Description: "镜像加速源（多个用逗号分隔，按顺序尝试）"},
+	{Key: "docker_registry_private", Value: "", Description: "私有仓库地址（如 harbor.example.com）"},
+	{Key: "docker_registry_user", Value: "", Description: "私有仓库用户名"},
+	{Key: "docker_registry_pass", Value: "", Description: "私有仓库密码"},
 }

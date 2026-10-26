@@ -28,6 +28,19 @@ export default {
     auto: '跟随系统'
   },
   saveFailed: '保存失败',
+  registry: {
+    title: '镜像仓库',
+    subtitle: '配置镜像拉取加速源与私有仓库，容器页拉取镜像时生效',
+    mirrors: '加速源',
+    mirrorsPlaceholder: '例如：\ndocker.m.daocloud.io\ndocker.1panel.live',
+    mirrorsHint: '每行一个或逗号分隔，按顺序尝试；留空表示直连 Docker Hub。仅对未指定仓库的镜像生效。',
+    private: '私有仓库地址',
+    privatePlaceholder: '例如 harbor.example.com（留空表示不使用）',
+    user: '私有仓库用户名',
+    userPlaceholder: '留空表示匿名',
+    pass: '私有仓库密码',
+    passPlaceholder: '与用户名配套'
+  },
   smtp: {
     title: '邮件配置',
     subtitle: '配置 SMTP 服务器用于发送通知邮件',

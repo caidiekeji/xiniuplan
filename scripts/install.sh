@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================================
-# CloudPivot 面板安装脚本
+# 犀牛面板安装脚本
 # 支持: CentOS 7+ / Ubuntu 20.04+ / Debian 11+
 # 架构: x86_64 / arm64
 # ============================================================
@@ -15,13 +15,19 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # 安装配置
-INSTALL_DIR="/opt/cloudpivot"
-BIN_PATH="/usr/local/bin/cloudpivot"
-SERVICE_NAME="cloudpivot"
+INSTALL_DIR="/opt/rhinopanel"
+BIN_PATH="/usr/local/bin/rhinopanel"
+SERVICE_NAME="rhinopanel"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
-PANEL_PORT="8443"
-# GitHub Releases 下载地址（占位 URL，请替换为实际发布地址）
-DOWNLOAD_BASE_URL="https://github.com/cloudpivot/cloudpivot/releases/latest/download"
+# 面板监听端口：与 backend/internal/config/config.go 的默认值一致（8888）
+PANEL_PORT="8888"
+# GitHub Releases 下载地址（真实仓库：caidiekeji/xiniupanl）
+# 产物由 .github/workflows/release.yml 打 tag 后自动构建发布，命名：
+#   rhinopanel-linux-amd64 / rhinopanel-linux-arm64
+DOWNLOAD_BASE_URL="https://github.com/caidiekeji/xiniupanl/releases/latest/download"
+# 允许通过环境变量自定义安装参数：
+#   ./install.sh 或 PANEL_PORT=9000 bash install.sh
+PANEL_PORT="${PANEL_PORT:-8888}"
 
 # ============================================================
 # 工具函数
@@ -166,9 +172,9 @@ create_directories() {
 # ============================================================
 
 download_binary() {
-    info "下载 CloudPivot 二进制文件..."
+    info "下载犀牛面板二进制文件..."
 
-    BINARY_NAME="cloudpivot-linux-${ARCH}"
+    BINARY_NAME="rhinopanel-linux-${ARCH}"
     DOWNLOAD_URL="${DOWNLOAD_BASE_URL}/${BINARY_NAME}"
     TEMP_FILE="/tmp/${BINARY_NAME}"
 
@@ -196,7 +202,7 @@ download_binary() {
 install_binary() {
     info "安装二进制文件..."
 
-    BINARY_NAME="cloudpivot-linux-${ARCH}"
+    BINARY_NAME="rhinopanel-linux-${ARCH}"
     TEMP_FILE="/tmp/${BINARY_NAME}"
 
     # 如果之前已下载则使用，否则重新下载
@@ -228,17 +234,19 @@ init_database() {
 }
 
 # ============================================================
-# 7. 生成随机初始管理员密码
+# 7. 生成配置文件
 # ============================================================
 
-generate_admin_password() {
-    info "生成初始管理员密码..."
-    ADMIN_PASSWORD=$(head -c 12 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 16)
-    if [ -z "${ADMIN_PASSWORD}" ] || [ ${#ADMIN_PASSWORD} -lt 16 ]; then
-        # 回退方案
-        ADMIN_PASSWORD=$(date +%s%N | sha256sum | base64 | tr -dc 'a-zA-Z0-9' | head -c 16)
-    fi
-    success "初始管理员密码已生成"
+generate_config() {
+    info "生成配置文件（端口 ${PANEL_PORT}）..."
+    cat > "${INSTALL_DIR}/config.yaml" <<EOF
+server:
+  port: ${PANEL_PORT}
+  mode: release
+database:
+  path: ./data/rhinopanel.db
+EOF
+    success "配置文件已生成: ${INSTALL_DIR}/config.yaml"
 }
 
 # ============================================================
@@ -251,8 +259,8 @@ generate_security_path() {
     if [ -z "${RANDOM_SUFFIX}" ]; then
         RANDOM_SUFFIX=$(date +%s | sha256sum | tr -dc 'a-z0-9' | head -c 6)
     fi
-    SECURITY_PATH="/panel-${RANDOM_SUFFIX}"
-    success "安全入口路径: ${SECURITY_PATH}"
+    SECURITY_PATH="panel-${RANDOM_SUFFIX}"
+    success "安全入口路径: /${SECURITY_PATH}"
 }
 
 # ============================================================
@@ -264,7 +272,7 @@ create_systemd_service() {
 
     cat > "${SERVICE_FILE}" <<EOF
 [Unit]
-Description=CloudPivot Server Management Panel
+Description=Rhinopanel Server Management Panel
 After=network.target docker.service
 Wants=network.target docker.service
 
@@ -276,6 +284,7 @@ Restart=always
 RestartSec=5
 LimitNOFILE=65536
 Environment=GIN_MODE=release
+Environment=SECURITY_ENTRY=${SECURITY_PATH}
 
 [Install]
 WantedBy=multi-user.target
@@ -289,7 +298,7 @@ EOF
 # ============================================================
 
 start_service() {
-    info "启动 CloudPivot 服务..."
+    info "启动犀牛面板服务..."
 
     systemctl daemon-reload
     systemctl enable "${SERVICE_NAME}"
@@ -299,7 +308,7 @@ start_service() {
     sleep 3
 
     if systemctl is-active --quiet "${SERVICE_NAME}"; then
-        success "CloudPivot 服务启动成功"
+        success "犀牛面板服务启动成功"
     else
         warn "服务可能未正常启动，请检查: systemctl status ${SERVICE_NAME}"
         warn "查看日志: journalctl -u ${SERVICE_NAME} -f"
@@ -336,7 +345,34 @@ configure_firewall() {
 }
 
 # ============================================================
-# 12. 打印安装信息
+# 12. 提取初始管理员密码
+#
+# 密码由程序在首次启动时随机生成（internal/service/auth InitAdmin），
+# 打印在服务日志里 —— 不在脚本侧预生成，保证两者一致（否则脚本展示的
+# 密码是摆设，真实密码藏在日志里，用户根本登不进去）。
+# ============================================================
+
+extract_admin_password() {
+    info "提取初始管理员密码..."
+    ADMIN_PASSWORD=""
+    for _ in 1 2 3 4 5; do
+        ADMIN_PASSWORD=$(journalctl -u "${SERVICE_NAME}" --since "5 minutes ago" --no-pager 2>/dev/null \
+            | grep "初始管理员已创建" | tail -1 \
+            | sed -n 's/.*admin \/ \([^，, ]*\).*/\1/p')
+        [ -n "${ADMIN_PASSWORD}" ] && break
+        sleep 2
+    done
+    if [ -n "${ADMIN_PASSWORD}" ]; then
+        success "初始管理员密码已提取"
+    else
+        warn "未能自动提取初始密码，请手动执行以下命令查看："
+        warn "  journalctl -u ${SERVICE_NAME} | grep '初始管理员'"
+        ADMIN_PASSWORD="（见上方命令输出）"
+    fi
+}
+
+# ============================================================
+# 13. 打印安装信息
 # ============================================================
 
 print_install_info() {
@@ -344,21 +380,18 @@ print_install_info() {
 
     echo ""
     echo "============================================================"
-    echo -e "${GREEN}  CloudPivot 面板安装完成!${NC}"
+    echo -e "${GREEN}  犀牛面板安装完成!${NC}"
     echo "============================================================"
     echo ""
     echo -e "  ${BLUE}访问地址:${NC}"
-    echo -e "    http://${SERVER_IP}:${PANEL_PORT}${SECURITY_PATH}"
+    echo -e "    http://${SERVER_IP}:${PANEL_PORT}/${SECURITY_PATH}"
     echo ""
     echo -e "  ${BLUE}初始账号:${NC}"
     echo -e "    用户名: admin"
     echo -e "    密  码: ${ADMIN_PASSWORD}"
     echo ""
-    echo -e "  ${BLUE}安全入口:${NC}"
-    echo -e "    ${SECURITY_PATH}"
-    echo ""
     echo -e "  ${YELLOW}重要提示:${NC}"
-    echo -e "    1. 请妥善保管初始密码，首次登录后立即修改"
+    echo -e "    1. 请妥善保管初始密码，首次登录后将强制修改"
     echo -e "    2. 安全入口路径用于隐藏面板地址，请牢记"
     echo -e "    3. 如无法访问，请检查防火墙是否放行端口 ${PANEL_PORT}"
     echo -e "    4. 服务管理命令: systemctl {start|stop|restart|status} ${SERVICE_NAME}"
@@ -370,13 +403,13 @@ print_install_info() {
     # 保存安装信息到文件
     INFO_FILE="${INSTALL_DIR}/install_info.txt"
     cat > "${INFO_FILE}" <<EOF
-CloudPivot 安装信息
+犀牛面板安装信息
 ====================
 安装时间: $(date '+%Y-%m-%d %H:%M:%S')
-访问地址: http://${SERVER_IP}:${PANEL_PORT}${SECURITY_PATH}
+访问地址: http://${SERVER_IP}:${PANEL_PORT}/${SECURITY_PATH}
 管理员账号: admin
 管理员密码: ${ADMIN_PASSWORD}
-安全入口: ${SECURITY_PATH}
+安全入口: /${SECURITY_PATH}
 面板端口: ${PANEL_PORT}
 安装目录: ${INSTALL_DIR}
 二进制路径: ${BIN_PATH}
@@ -392,7 +425,7 @@ EOF
 main() {
     echo ""
     echo "============================================================"
-    echo "  CloudPivot 面板安装脚本"
+    echo "  犀牛面板安装脚本"
     echo "  支持: CentOS 7+ / Ubuntu 20.04+ / Debian 11+"
     echo "============================================================"
     echo ""
@@ -404,10 +437,11 @@ main() {
     download_binary
     install_binary
     init_database
-    generate_admin_password
     generate_security_path
     create_systemd_service
     start_service
+    # 从 journalctl 提取程序随机生成的初始密码，必须在服务启动之后
+    extract_admin_password
     configure_firewall
     print_install_info
 }

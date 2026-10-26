@@ -1,4 +1,5 @@
 import { request } from './request'
+import { useAuthStore } from '@/stores/auth'
 
 /* ==================== 类型定义 ==================== */
 
@@ -114,6 +115,104 @@ export function removeImage(id: string, force = false) {
     method: 'delete',
     params: { force }
   })
+}
+
+/* ==================== 镜像拉取 ==================== */
+
+/** 仓库选项（含直连、加速源、私有仓库） */
+export interface RegistryOption {
+  /** 选中值：'' 直连 / '@private' 私有仓库 / 其余为加速源地址 */
+  id: string
+  name: string
+}
+
+export interface RegistryListData {
+  registries: RegistryOption[]
+  has_private: boolean
+  private_addr: string
+  private_user: string
+}
+
+/** 拉取进度帧 */
+export interface PullProgress {
+  layer_id?: string
+  status?: string
+  current?: number
+  total?: number
+  percent?: number
+  /** 出错帧 */
+  error?: string
+  /** 完成帧 */
+  image_ref?: string
+  message?: string
+}
+
+/** 获取可用的仓库列表 */
+export function getRegistries() {
+  return request<RegistryListData>({
+    url: '/images/registries',
+    method: 'get'
+  })
+}
+
+/**
+ * 拉取镜像（SSE 流式进度）。
+ *
+ * 为什么不用 axios：响应是永不结束的流式帧，axios 会挂起到超时。
+ * 为什么不用 EventSource：它不支持 Authorization 头，带不了登录 token。
+ * 与容器日志跟随同一套实现（utils/sse.ts）。
+ */
+export function pullImage(
+  data: { image: string; mirror?: string; username?: string; password?: string },
+  onProgress: (p: PullProgress) => void,
+  onError?: (e: Error) => void
+): () => void {
+  const base = `${(window as any).__PANEL_BASE__ || ''}/api/v1`
+  const token = useAuthStore().token
+  const controller = new AbortController()
+
+  ;(async () => {
+    try {
+      const resp = await fetch(`${base}/images/pull`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'text/event-stream',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify(data),
+        signal: controller.signal
+      })
+      if (!resp.ok || !resp.body) throw new Error(`拉取请求失败: HTTP ${resp.status}`)
+
+      const reader = resp.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        let idx: number
+        while ((idx = buffer.indexOf('\n')) >= 0) {
+          const line = buffer.slice(0, idx).replace(/\r$/, '')
+          buffer = buffer.slice(idx + 1)
+          if (!line.startsWith('data:')) continue
+          const payload = line.slice(5).replace(/^ /, '')
+          if (!payload) continue
+          try {
+            onProgress(JSON.parse(payload) as PullProgress)
+          } catch {
+            // 非 JSON 帧（如心跳），忽略
+          }
+        }
+      }
+    } catch (e: any) {
+      if (e?.name === 'AbortError') return
+      onError?.(e instanceof Error ? e : new Error(String(e)))
+    }
+  })()
+
+  return () => controller.abort()
 }
 
 export interface ContainerStatsData {

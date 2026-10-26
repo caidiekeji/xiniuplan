@@ -3,7 +3,9 @@ package api
 import (
 	"bufio"
 	"io"
+	"net/http"
 	"strconv"
+	"time"
 
 	"cloudpivot/internal/common"
 	"cloudpivot/internal/dto"
@@ -185,6 +187,12 @@ func (h *ContainerHandler) GetContainerLogs(c *gin.Context) {
 	if !ok {
 		common.Fail(c, common.CodeServerError, "streaming not supported")
 		return
+	}
+
+	// 解除本连接的写超时（与 /images/pull 同理）：日志跟随是长连接，必须避免
+	// 被 http.Server 的 60s 写超时掐断（否则 60s 后静默断流、UI 卡在「跟随中」）。
+	if rc := http.NewResponseController(c.Writer); rc != nil {
+		_ = rc.SetWriteDeadline(time.Time{})
 	}
 
 	scanner := bufio.NewScanner(pr)

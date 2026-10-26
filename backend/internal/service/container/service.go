@@ -294,3 +294,19 @@ func (s *Service) RemoveImage(imageID string, force bool) error {
 	defer cancel()
 	return s.client.RemoveImage(ctx, imageID, force)
 }
+
+// PullImageWithProgress 拉取镜像（带进度回调）
+//
+// 不设整体超时：大镜像拉取可能超过 30 分钟，超时会让拉到一半的连接断掉。
+// 由调用方（HTTP handler）传入的 ctx 控制取消时机——客户端断开连接时 ctx 取消，
+// 拉取随之终止，避免服务端空跑占用带宽/磁盘。
+func (s *Service) PullImageWithProgress(
+	ctx context.Context,
+	imageRef, registryAuth string,
+	onProgress func(dockerpkg.PullProgress),
+) (*dockerpkg.PullResult, error) {
+	if s.client == nil {
+		return nil, errDockerUnavailable
+	}
+	return s.client.PullImageWithProgress(ctx, imageRef, registryAuth, onProgress)
+}

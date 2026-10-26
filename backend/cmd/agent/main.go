@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"log/slog"
@@ -21,6 +22,7 @@ import (
 	aisvc "cloudpivot/internal/service/ai"
 	alertservice "cloudpivot/internal/service/alert"
 	authsvc "cloudpivot/internal/service/auth"
+
 	containersvc "cloudpivot/internal/service/container"
 	cronsvc "cloudpivot/internal/service/cron"
 	daemonsvc "cloudpivot/internal/service/daemon"
@@ -29,6 +31,7 @@ import (
 	nodesvc "cloudpivot/internal/service/node"
 	sitesvc "cloudpivot/internal/service/site"
 	systemsvc "cloudpivot/internal/service/system"
+	"gorm.io/gorm"
 
 	"github.com/gin-gonic/gin"
 )
@@ -69,6 +72,15 @@ func main() {
 	if err := authService.InitAdmin(); err != nil {
 		slog.Error("初始化管理员失败", "error", err)
 		os.Exit(1)
+	}
+
+	// 安全入口种子：安装脚本（scripts/install.sh）通过 systemd 环境变量传入
+	// 随机入口路径，首次启动时写入 settings。仅在「变量非空且库里尚未配置」时生效，
+	// 之后的修改一律走设置页 —— 保证环境变量不会覆盖用户在界面上的手动配置。
+	if entry := strings.TrimSpace(os.Getenv("SECURITY_ENTRY")); entry != "" {
+		if err := seedSecurityEntry(db, entry); err != nil {
+			slog.Warn("安全入口种子写入失败（可忽略，之后可在设置页手动配置）", "error", err)
+		}
 	}
 
 	// 监控采集器
@@ -186,6 +198,9 @@ func main() {
 
 		// 容器管理
 		api.RegisterContainerRoutes(authGroup)
+
+		// 镜像拉取（自定义加速源 / 私有仓库）
+		api.RegisterImagePullRoutes(authGroup)
 
 		// 应用商店
 		api.RegisterAppStoreRoutes(authGroup)
@@ -356,4 +371,37 @@ func panelIndexHTML(distFS fs.FS) []byte {
 	}
 	injected := `<script>window.__PANEL_BASE__="` + base + `";</script>`
 	return []byte(strings.Replace(string(index), panelBasePlaceholder, injected, 1))
+}
+
+// seedSecurityEntry 首次启动时把安装脚本传入的安全入口写入 settings
+//
+// 库里已有值（含空串即用户显式关闭过入口）则不覆盖。
+func seedSecurityEntry(db *gorm.DB, entry string) error {
+	// 规整：去掉首尾斜杠，避免 /panel-x 与 panel-x 混存
+	entry = strings.Trim(entry, "/")
+	if entry == "" {
+		return nil
+	}
+
+	var setting model.Setting
+	err := db.Where("`key` = ?", "security_entry").First(&setting).Error
+	if err == nil {
+		// 已存在：无论值是什么都不覆盖（用户显式配置优先）
+		return nil
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return fmt.Errorf("query security_entry: %w", err)
+	}
+
+	setting = model.Setting{
+		Key:         "security_entry",
+		Value:       entry,
+		Description: "安全入口",
+		UpdatedAt:   time.Now(),
+	}
+	if err := db.Create(&setting).Error; err != nil {
+		return fmt.Errorf("create security_entry: %w", err)
+	}
+	slog.Info("[犀牛面板] 安全入口已按安装配置启用", "entry", "/"+entry)
+	return nil
 }

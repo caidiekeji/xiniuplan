@@ -52,3 +52,9 @@ rhinopanel-test.exe
 panel-test.log
 backend/rhinopanel-test.exe
 backend/panel-test.log
+
+# 本地部署临时打包目录（本地预览用，非发布产物）
+frontend/dist-deploy*/
+
+# 编译产物二进制（由 CI release.yml 构建并发布到 Releases，不入库）
+backend/rhinopanel-linux

@@ -28,6 +28,19 @@ export default {
     auto: 'Follow System'
   },
   saveFailed: 'Save failed',
+  registry: {
+    title: 'Image Registry',
+    subtitle: 'Configure pull mirrors and private registries, applied when pulling images',
+    mirrors: 'Mirrors',
+    mirrorsPlaceholder: 'e.g.\ndocker.m.daocloud.io\ndocker.1panel.live',
+    mirrorsHint: 'One per line or comma-separated, tried in order; leave empty to pull from Docker Hub directly. Only applies to images without an explicit registry.',
+    private: 'Private Registry',
+    privatePlaceholder: 'e.g. harbor.example.com (empty to disable)',
+    user: 'Private Registry Username',
+    userPlaceholder: 'Empty for anonymous',
+    pass: 'Private Registry Password',
+    passPlaceholder: 'Paired with username'
+  },
   smtp: {
     title: 'Email Configuration',
     subtitle: 'Configure the SMTP server used to send notification emails',

@@ -10,6 +10,11 @@ export interface SystemSettings {
   theme: 'dark' | 'light' | 'auto'
   security_entry: string
   session_timeout: number
+  // Docker 镜像拉取地址（加速源 + 私有仓库凭据）
+  docker_registry_mirrors: string
+  docker_registry_private: string
+  docker_registry_user: string
+  docker_registry_pass: string
 }
 
 export interface SmtpConfig {
@@ -66,6 +71,10 @@ interface RawSettings {
   theme?: string
   security_entry?: string
   session_timeout?: string | number
+  docker_registry_mirrors?: string
+  docker_registry_private?: string
+  docker_registry_user?: string
+  docker_registry_pass?: string
 }
 
 function toSettings(raw: RawSettings): SystemSettings {
@@ -75,7 +84,11 @@ function toSettings(raw: RawSettings): SystemSettings {
     language: (raw.language ?? 'zh-CN') as SystemSettings['language'],
     theme: (raw.theme ?? 'dark') as SystemSettings['theme'],
     security_entry: raw.security_entry ?? '',
-    session_timeout: Number(raw.session_timeout ?? 120)
+    session_timeout: Number(raw.session_timeout ?? 120),
+    docker_registry_mirrors: raw.docker_registry_mirrors ?? '',
+    docker_registry_private: raw.docker_registry_private ?? '',
+    docker_registry_user: raw.docker_registry_user ?? '',
+    docker_registry_pass: raw.docker_registry_pass ?? ''
   }
 }
 
@@ -87,6 +100,10 @@ function toSettingsPayload(settings: Partial<SystemSettings>) {
   if (settings.theme !== undefined) payload.theme = settings.theme
   if (settings.security_entry !== undefined) payload.security_entry = settings.security_entry
   if (settings.session_timeout !== undefined) payload.session_timeout = String(settings.session_timeout)
+  if (settings.docker_registry_mirrors !== undefined) payload.docker_registry_mirrors = settings.docker_registry_mirrors
+  if (settings.docker_registry_private !== undefined) payload.docker_registry_private = settings.docker_registry_private
+  if (settings.docker_registry_user !== undefined) payload.docker_registry_user = settings.docker_registry_user
+  if (settings.docker_registry_pass !== undefined) payload.docker_registry_pass = settings.docker_registry_pass
   return payload
 }
 

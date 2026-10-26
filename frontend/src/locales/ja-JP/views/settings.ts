@@ -28,6 +28,19 @@ export default {
     auto: 'システムに追従'
   },
   saveFailed: '保存に失敗しました',
+  registry: {
+    title: 'イメージレジストリ',
+    subtitle: '取得ミラーとプライベートレジストリを設定します。イメージ取得時に適用されます',
+    mirrors: 'ミラー',
+    mirrorsPlaceholder: '例:\ndocker.m.daocloud.io\ndocker.1panel.live',
+    mirrorsHint: '1 行に 1 つまたはカンマ区切りで順番に試行。空欄の場合は Docker Hub に直接接続します。レジストリを明示しないイメージにのみ適用されます。',
+    private: 'プライベートレジストリ',
+    privatePlaceholder: '例: harbor.example.com（空欄で無効）',
+    user: 'プライベートレジストリのユーザー名',
+    userPlaceholder: '空欄で匿名',
+    pass: 'プライベートレジストリのパスワード',
+    passPlaceholder: 'ユーザー名とペア'
+  },
   smtp: {
     title: 'メール設定',
     subtitle: '通知メール送信用の SMTP サーバーを設定します',

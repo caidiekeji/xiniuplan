@@ -50,7 +50,12 @@ const settings = ref<SystemSettings>({
   // 用户随手点「保存」就会给自己开启访问前缀，当前 URL 立即失效被锁在门外
   // （2026-10-23 闭环审计发现的高危默认值）
   security_entry: '',
-  session_timeout: 30
+  session_timeout: 30,
+  // 镜像拉取地址：默认全空 = 直连 Docker Hub、无私有仓库
+  docker_registry_mirrors: '',
+  docker_registry_private: '',
+  docker_registry_user: '',
+  docker_registry_pass: ''
 })
 
 const languageOptions = [
@@ -771,6 +776,52 @@ onMounted(() => {
       </NForm>
     </PageCard>
 
+      </NTabPane>
+
+      <NTabPane name="registry" :tab="t('settings.registry.title')">
+    <!-- 分区: 镜像仓库（拉取地址） -->
+    <PageCard :title="t('settings.registry.title')" :subtitle="t('settings.registry.subtitle')">
+      <NForm label-placement="left" :label-width="110" :loading="settingsLoading">
+        <NFormItem :label="t('settings.registry.mirrors')">
+          <NInput
+            v-model:value="settings.docker_registry_mirrors"
+            type="textarea"
+            :rows="3"
+            :placeholder="t('settings.registry.mirrorsPlaceholder')"
+          />
+        </NFormItem>
+        <div class="form-hint">{{ t('settings.registry.mirrorsHint') }}</div>
+
+        <NFormItem :label="t('settings.registry.private')">
+          <NInput v-model:value="settings.docker_registry_private" :placeholder="t('settings.registry.privatePlaceholder')" />
+        </NFormItem>
+
+        <NGrid cols="1 s:2" :x-gap="24" responsive="screen">
+          <NGi>
+            <NFormItem :label="t('settings.registry.user')">
+              <NInput v-model:value="settings.docker_registry_user" :placeholder="t('settings.registry.userPlaceholder')" />
+            </NFormItem>
+          </NGi>
+          <NGi>
+            <NFormItem :label="t('settings.registry.pass')">
+              <NInput
+                v-model:value="settings.docker_registry_pass"
+                type="password"
+                show-password-on="click"
+                :placeholder="t('settings.registry.passPlaceholder')"
+              />
+            </NFormItem>
+          </NGi>
+        </NGrid>
+
+        <div class="settings__actions">
+          <NButton type="primary" :loading="saveLoading" @click="handleSaveSettings">
+            <template #icon><NIcon><SaveOutline /></NIcon></template>
+            {{ t('settings.panel.save') }}
+          </NButton>
+        </div>
+      </NForm>
+    </PageCard>
       </NTabPane>
 
       <NTabPane name="smtp" :tab="t('settings.smtp.title')">

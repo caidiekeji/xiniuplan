@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, h } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, h, reactive } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useMessage } from '@/composables/useMessage'
 import { NButton, NSpace, NIcon, NSelect, NInput, NTag, NEmpty, NSpin, NAlert, NSwitch, NDrawer, NDrawerContent, NRadioGroup, NRadio, NProgress, NDropdown } from 'naive-ui'
 import type { DataTableColumns, DropdownOption } from 'naive-ui'
-import { PlayOutline, StopOutline, RefreshOutline, DocumentTextOutline, CopyOutline, ImagesOutline, EllipsisHorizontalOutline, TrashOutline } from '@vicons/ionicons5'
+import { PlayOutline, StopOutline, RefreshOutline, DocumentTextOutline, CopyOutline, ImagesOutline, EllipsisHorizontalOutline, TrashOutline, DownloadOutline } from '@vicons/ionicons5'
 import {
   PageCard, DataTable, StatusTag, ConfirmDialog, ContentModal, CodeEditor
 } from '@/components'
@@ -13,7 +13,7 @@ import * as containerApi from '@/api/container'
 import { formatDate } from '@/utils/format'
 import { subscribeSSE } from '@/utils/sse'
 import { useQueryState } from '@/composables/useQueryState'
-import type { Container, ContainerStatus, Image } from '@/api/container'
+import type { Container, ContainerStatus, Image, RegistryOption, PullProgress } from '@/api/container'
 
 import DockerResources from './DockerResources.vue'
 import Compose from './Compose.vue'
@@ -252,6 +252,122 @@ async function openLogs(row: Container) {
   if (logFollow.value) {
     startLogFollow()
   }
+}
+
+/* ==================== 镜像拉取 ==================== */
+
+const pullModalVisible = ref(false)
+const pullLoading = ref(false)
+const pullRegistries = ref<RegistryOption[]>([])
+const pullHasPrivate = ref(false)
+const pullPrivateUser = ref('')
+const pullForm = reactive({
+  image: '',
+  mirror: '',
+  username: '',
+  password: ''
+})
+const pullProgress = ref<PullProgress[]>([])
+const pullOverall = ref(0)
+const pullStatusText = ref('')
+let pullUnsubscribe: (() => void) | null = null
+
+/** 打开拉取弹窗：重置表单并加载可用仓库列表 */
+async function openPull() {
+  pullModalVisible.value = true
+  pullForm.image = ''
+  pullForm.mirror = ''
+  pullForm.username = ''
+  pullForm.password = ''
+  pullProgress.value = []
+  pullOverall.value = 0
+  pullStatusText.value = ''
+  try {
+    const res = await containerApi.getRegistries()
+    pullRegistries.value = res.data.registries || []
+    pullHasPrivate.value = !!res.data.has_private
+    pullPrivateUser.value = res.data.private_user || ''
+    // 默认直连 Docker Hub：私有仓库镜像自带 registry，若默认选中加速源反而会被
+    // 后端拒绝改写（P1-3）。用户需加速时再手动从下拉选择即可。
+    pullForm.mirror = ''
+    pullForm.username = ''
+  } catch {
+    pullRegistries.value = []
+  }
+}
+
+/** 开始拉取 */
+async function handlePull() {
+  const image = pullForm.image.trim()
+  if (!image) {
+    message.warning(t('container.pull.imageRequired'))
+    return
+  }
+  if (pullLoading.value) return
+
+  pullLoading.value = true
+  pullProgress.value = []
+  pullOverall.value = 0
+  pullStatusText.value = t('container.pull.pulling')
+
+  // 凭据仅在选择私有仓库（@private）时随请求发送，避免把私有仓库账号误发给加速源
+  const isPrivate = pullForm.mirror === '@private'
+  pullUnsubscribe = containerApi.pullImage(
+    {
+      image,
+      mirror: pullForm.mirror,
+      username: isPrivate ? pullForm.username || undefined : undefined,
+      password: isPrivate ? pullForm.password || undefined : undefined
+    },
+    (p) => {
+      if (p.error) {
+        pullStatusText.value = p.error
+        message.error(p.error)
+        pullLoading.value = false
+        return
+      }
+      if (p.status === 'pulling') return // 心跳帧
+      if (p.message || p.status === 'Pull complete') {
+        pullStatusText.value = p.message || t('container.pull.complete')
+        pullOverall.value = 100
+        pullLoading.value = false
+        message.success(p.message || t('container.pull.complete'))
+        loadImages()
+        return
+      }
+      if (p.status) pullStatusText.value = p.status
+      // 汇总总进度：按各层百分比的最大值近似（各层并行下载，没有全局真值）
+      if (p.percent !== undefined && p.percent >= 0) {
+        const idx = pullProgress.value.findIndex((x) => x.layer_id === p.layer_id)
+        if (idx >= 0) pullProgress.value[idx] = p
+        else pullProgress.value.push(p)
+        pullProgress.value = [...pullProgress.value]
+        const max = Math.max(...pullProgress.value.map((x) => x.percent ?? 0))
+        pullOverall.value = Math.min(100, Math.round(max))
+      }
+    },
+    (e) => {
+      pullStatusText.value = e.message
+      message.error(e.message)
+      pullLoading.value = false
+    }
+  )
+}
+
+/** 取消拉取 */
+function cancelPull() {
+  if (pullUnsubscribe) {
+    pullUnsubscribe()
+    pullUnsubscribe = null
+  }
+  pullLoading.value = false
+  pullStatusText.value = t('container.pull.cancelled')
+}
+
+/** 关闭弹窗时确保取消未完成的拉取 */
+function closePull() {
+  if (pullLoading.value) cancelPull()
+  pullModalVisible.value = false
 }
 
 /* ==================== 容器资源统计 ==================== */
@@ -659,6 +775,9 @@ function openExec(row: any) {
         <div class="images-section__header">
           <NIcon :size="16"><ImagesOutline /></NIcon>
           <span class="images-section__title">{{ t('container.imagesTitle') }}</span>
+          <NButton size="tiny" @click="openPull">
+            <template #icon><NIcon><DownloadOutline /></NIcon></template>{{ t('container.pull.button') }}
+          </NButton>
           <NButton size="tiny" text @click="loadImages" :loading="imagesLoading">
             <template #icon><NIcon><RefreshOutline /></NIcon></template>{{ t('container.refresh') }}
           </NButton>
@@ -775,6 +894,88 @@ function openExec(row: any) {
           </div>
         </div>
       </NSpin>
+    </ContentModal>
+
+    <!-- 拉取镜像弹窗：表单 + 流式进度 -->
+    <ContentModal
+      :show="pullModalVisible"
+      :title="t('container.pull.title')"
+      size="md"
+      :mask-closable="false"
+      @update:show="(v: boolean) => { if (!v) closePull() }"
+    >
+      <div class="pull-form">
+        <div class="pull-form__row">
+          <label class="pull-form__label">{{ t('container.pull.imageLabel') }}</label>
+          <NInput
+            v-model:value="pullForm.image"
+            :placeholder="t('container.pull.imagePlaceholder')"
+            :disabled="pullLoading"
+            @keydown.enter="!pullLoading && handlePull()"
+          />
+          <div class="form-hint">{{ t('container.pull.imageHint') }}</div>
+        </div>
+
+        <div class="pull-form__row">
+          <label class="pull-form__label">{{ t('container.pull.registryLabel') }}</label>
+          <NSelect
+            v-model:value="pullForm.mirror"
+            :options="pullRegistries.map((r) => ({ label: r.name, value: r.id }))"
+            :disabled="pullLoading"
+            :placeholder="t('container.pull.registryPlaceholder')"
+          />
+          <div v-if="pullForm.mirror === '@private'" class="pull-private">
+            <NInput
+              v-model:value="pullForm.username"
+              :placeholder="t('container.pull.usernamePlaceholder')"
+              :disabled="pullLoading"
+            />
+            <NInput
+              v-model:value="pullForm.password"
+              type="password"
+              show-password-on="click"
+              :placeholder="t('container.pull.passwordPlaceholder')"
+              :disabled="pullLoading"
+            />
+          </div>
+        </div>
+
+        <!-- 进度区：拉取中显示 -->
+        <div v-if="pullLoading || pullOverall > 0" class="pull-progress">
+          <NProgress
+            type="line"
+            :percentage="pullOverall"
+            :height="10"
+            indicator-placement="inside"
+            :processing="pullLoading"
+          />
+          <div class="pull-progress__status">{{ pullStatusText }}</div>
+          <div v-if="pullProgress.length > 0" class="pull-progress__layers">
+            <div v-for="p in pullProgress.slice(0, 5)" :key="p.layer_id" class="pull-progress__layer">
+              <span class="mono pull-progress__id">{{ p.layer_id?.slice(0, 10) }}</span>
+              <span class="pull-progress__text">{{ p.status }}</span>
+            </div>
+            <div v-if="pullProgress.length > 5" class="pull-progress__more">
+              {{ t('container.pull.moreLayers', { n: pullProgress.length - 5 }) }}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <template #footer>
+        <NSpace justify="end">
+          <NButton v-if="pullLoading" @click="cancelPull">{{ t('container.pull.cancel') }}</NButton>
+          <NButton v-else @click="closePull">{{ t('container.pull.close') }}</NButton>
+          <NButton
+            type="primary"
+            :loading="pullLoading"
+            :disabled="!pullForm.image.trim()"
+            @click="handlePull"
+          >
+            {{ t('container.pull.start') }}
+          </NButton>
+        </NSpace>
+      </template>
     </ContentModal>
   </PageCard>
 
@@ -929,5 +1130,70 @@ function openExec(row: any) {
   font-size: 12px;
   min-width: 150px;
   text-align: right;
+}
+
+/* 拉取镜像弹窗 */
+.pull-form__row {
+  margin-bottom: var(--space-4);
+}
+
+.pull-form__label {
+  display: block;
+  font-size: var(--fs-caption);
+  color: var(--sub);
+  margin-bottom: var(--space-2);
+}
+
+.pull-private {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.pull-progress {
+  margin-top: var(--space-5);
+  padding: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface2);
+}
+
+.pull-progress__status {
+  font-size: var(--fs-caption);
+  color: var(--sub);
+  margin-top: var(--space-2);
+  word-break: break-all;
+}
+
+.pull-progress__layers {
+  margin-top: var(--space-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.pull-progress__layer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--fs-caption);
+}
+
+.pull-progress__id {
+  color: var(--text-quaternary);
+  flex-shrink: 0;
+}
+
+.pull-progress__text {
+  color: var(--sub);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pull-progress__more {
+  font-size: var(--fs-caption);
+  color: var(--text-quaternary);
 }
 </style>

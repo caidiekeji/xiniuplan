@@ -60,6 +60,44 @@ func RegisterSystemRoutes(r *gin.RouterGroup) {
 	RegisterDNSRoutes(r)
 }
 
+// sensitiveSettingKeys 这些键是密码类，GET 响应中一律脱敏，避免明文泄漏。
+// 任何持有 PermSettingView 的账号（RBAC 下可授给非管理员）都能读设置，
+// 因此绝不能回传 smtp_pass / docker_registry_pass 真值。
+var sensitiveSettingKeys = map[string]bool{
+	"smtp_pass":            true,
+	"docker_registry_pass": true,
+}
+
+// settingSentinel GET 响应中密码字段的占位值。前端用它区分「用户未改动密码」，
+// PUT 时原样回传此值则被 stripSentinelSettings 剔除，不覆盖存储的真实密码。
+const settingSentinel = "********"
+
+// maskSensitiveSettings 脱敏密码类字段：非空密码替换为哨兵值，空值保持不变
+// （空值表示该项未配置，前端据此判断是否需要填写）。
+func maskSensitiveSettings(in map[string]string) map[string]string {
+	out := make(map[string]string, len(in))
+	for k, v := range in {
+		if sensitiveSettingKeys[k] && v != "" {
+			out[k] = settingSentinel
+			continue
+		}
+		out[k] = v
+	}
+	return out
+}
+
+// stripSentinelSettings 剔除回传的哨兵值，避免把存储的真实密码覆盖成占位串。
+func stripSentinelSettings(in map[string]string) map[string]string {
+	out := make(map[string]string, len(in))
+	for k, v := range in {
+		if sensitiveSettingKeys[k] && v == settingSentinel {
+			continue
+		}
+		out[k] = v
+	}
+	return out
+}
+
 // GetSettings GET /system/settings - 获取设置
 func (h *SystemHandler) GetSettings(c *gin.Context) {
 	settings, err := h.svc.GetSettings()
@@ -68,7 +106,7 @@ func (h *SystemHandler) GetSettings(c *gin.Context) {
 		return
 	}
 
-	common.Success(c, dto.SettingsResponse{Settings: settings})
+	common.Success(c, dto.SettingsResponse{Settings: maskSensitiveSettings(settings)})
 }
 
 // UpdateSettings PUT /system/settings - 更新设置
@@ -79,7 +117,7 @@ func (h *SystemHandler) UpdateSettings(c *gin.Context) {
 		return
 	}
 
-	if err := h.svc.UpdateSettings(req.Settings); err != nil {
+	if err := h.svc.UpdateSettings(stripSentinelSettings(req.Settings)); err != nil {
 		common.Fail(c, common.CodeServerError, "更新系统设置失败: "+err.Error())
 		return
 	}
@@ -149,7 +187,7 @@ func (h *SystemHandler) GetSmtpConfig(c *gin.Context) {
 		common.Fail(c, common.CodeServerError, "获取 SMTP 配置失败: "+err.Error())
 		return
 	}
-	common.Success(c, config)
+	common.Success(c, maskSensitiveSettings(config))
 }
 
 // UpdateSmtpConfig PUT /system/smtp - 更新 SMTP 配置
