@@ -21,10 +21,10 @@ SERVICE_NAME="rhinopanel"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
 # 面板监听端口：与 backend/internal/config/config.go 的默认值一致（8888）
 PANEL_PORT="8888"
-# GitHub Releases 下载地址（真实仓库：caidiekeji/xiniupanl）
+# GitHub Releases 下载地址（真实仓库：caidiekeji/xiniuplan）
 # 产物由 .github/workflows/release.yml 打 tag 后自动构建发布，命名：
 #   rhinopanel-linux-amd64 / rhinopanel-linux-arm64
-DOWNLOAD_BASE_URL="https://github.com/caidiekeji/xiniupanl/releases/latest/download"
+DOWNLOAD_BASE_URL="https://github.com/caidiekeji/xiniuplan/releases/latest/download"
 # 允许通过环境变量自定义安装参数：
 #   ./install.sh 或 PANEL_PORT=9000 bash install.sh
 PANEL_PORT="${PANEL_PORT:-8888}"

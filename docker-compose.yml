@@ -1,6 +1,6 @@
 version: '3.8'
 
-# 云枢面板 - 单镜像部署
+# 犀牛面板 - 单镜像部署
 # 一个容器同时提供页面（SPA）与 API/WebSocket，无需独立前端容器。
 # 使用 GHCR 镜像：
 #   docker compose pull && docker compose up -d
@@ -12,8 +12,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: ghcr.io/caidiekeji/xiniupanl:latest
-    container_name: xiniupanl
+    image: ghcr.io/caidiekeji/xiniuplan:latest
+    container_name: xiniuplan
     restart: always
     ports:
       - "8888:8888"
@@ -40,7 +40,7 @@ services:
   #   docker compose --profile database up -d
   mysql:
     image: mysql:8.0
-    container_name: xiniupanl-mysql
+    container_name: xiniuplan-mysql
     restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-cloudpivot}
@@ -48,20 +48,20 @@ services:
     volumes:
       - mysql-data:/var/lib/mysql
     networks:
-      - xiniupanl
+      - xiniuplan
     profiles:
       - database
 
   # ==================== 可选：Redis ====================
   redis:
     image: redis:7-alpine
-    container_name: xiniupanl-redis
+    container_name: xiniuplan-redis
     restart: unless-stopped
     command: redis-server --appendonly yes
     volumes:
       - redis-data:/data
     networks:
-      - xiniupanl
+      - xiniuplan
     profiles:
       - database
 
@@ -80,5 +80,5 @@ volumes:
 
 # ==================== 网络 ====================
 networks:
-  xiniupanl:
+  xiniuplan:
     driver: bridge

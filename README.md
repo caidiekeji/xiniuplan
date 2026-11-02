@@ -1,11 +1,9 @@
 # 犀牛面板（RhinoPanel）
 
-[![CI](https://github.com/USERNAME/REPO/actions/workflows/ci.yml/badge.svg)](https://github.com/USERNAME/REPO/actions/workflows/ci.yml)
-[![Docker Build](https://github.com/USERNAME/REPO/actions/workflows/docker.yml/badge.svg)](https://github.com/USERNAME/REPO/actions/workflows/docker.yml)
-[![CodeQL](https://github.com/USERNAME/REPO/actions/workflows/codeql.yml/badge.svg)](https://github.com/USERNAME/REPO/actions/workflows/codeql.yml)
+[![CI](https://github.com/caidiekeji/xiniuplan/actions/workflows/ci.yml/badge.svg)](https://github.com/caidiekeji/xiniuplan/actions/workflows/ci.yml)
+[![Docker Build](https://github.com/caidiekeji/xiniuplan/actions/workflows/docker.yml/badge.svg)](https://github.com/caidiekeji/xiniuplan/actions/workflows/docker.yml)
+[![CodeQL](https://github.com/caidiekeji/xiniuplan/actions/workflows/codeql.yml/badge.svg)](https://github.com/caidiekeji/xiniuplan/actions/workflows/codeql.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-
-> 徽章链接中的 `USERNAME/REPO` 请替换为实际的 GitHub 仓库所有者和仓库名。
 
 轻量级 Linux 服务器可视化管理平台，基于 Go + Vue3 + Docker 构建，类似 1Panel / 宝塔面板。
 
