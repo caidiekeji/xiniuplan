@@ -213,18 +213,18 @@ onMounted(async () => {
             :loading="sitesLoading"
             :placeholder="t('protection.selectSite')"
             filterable
-            style="width: 280px"
+            style="width: var(--input-2xl)"
             @update:value="handleSelectSite"
           />
         </div>
 
-        <NForm v-if="selectedSite !== null" label-placement="top" style="max-width: 640px; margin-top: var(--space-4)">
+        <NForm v-if="selectedSite !== null" label-placement="top" style="max-width: var(--content-max-md); margin-top: var(--space-4)">
           <NFormItem :label="t('protection.enableWaf')">
             <NSwitch v-model:value="wafForm.waf_enabled" />
             <span class="form-note">{{ t('protection.wafNote') }}</span>
           </NFormItem>
           <NFormItem :label="t('protection.ccLabel')">
-            <NInputNumber v-model:value="wafForm.cc_rpm" :min="1" :max="10000" style="width: 220px">
+            <NInputNumber v-model:value="wafForm.cc_rpm" :min="1" :max="10000" style="width: var(--input-xl)">
               <template #suffix>req/s</template>
             </NInputNumber>
             <span class="form-note">{{ t('protection.ccNote') }}</span>
@@ -263,7 +263,7 @@ onMounted(async () => {
             :loading="sitesLoading"
             :placeholder="t('protection.selectSite')"
             filterable
-            style="width: 280px"
+            style="width: var(--input-2xl)"
             @update:value="handleSelectSite"
           />
           <template v-if="selectedSite !== null">

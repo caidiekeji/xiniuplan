@@ -559,7 +559,12 @@ watch(activeSubTab, (tab) => {
               :key="db.name"
               class="db-item"
               :class="{ 'db-item--active': db.name === selectedDbName }"
+              role="button"
+              tabindex="0"
+              :aria-pressed="db.name === selectedDbName"
               @click="selectedDbName = db.name"
+              @keydown.enter.prevent="selectedDbName = db.name"
+              @keydown.space.prevent="selectedDbName = db.name"
             >
               <NIcon :size="14"><FileTrayFullOutline /></NIcon>
               <span class="mono db-item__name">{{ db.name }}</span>

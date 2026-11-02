@@ -26,7 +26,10 @@ defineProps<{
         <NSkeleton height="32px" :sharp="false" />
         <NSkeleton v-for="i in 4" :key="i" height="20px" :sharp="false" :width="`${96 - i * 7}%`" />
       </div>
-      <slot v-else />
+      <!-- 内容淡入：骨架切换为真实内容时给出柔和衔接，避免瞬时跳变（审查报告 P1 动画） -->
+      <div v-else class="page-card__content">
+        <slot />
+      </div>
     </div>
   </div>
 </template>
@@ -79,6 +82,22 @@ defineProps<{
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+}
+
+/* 内容入场：仅动画 opacity / transform（合成器友好），不做布局位移 */
+.page-card__content {
+  animation: page-content-in var(--t-normal) var(--ease);
+}
+
+@keyframes page-content-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 /* 移动端适配 */

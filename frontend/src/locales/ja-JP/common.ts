@@ -21,6 +21,7 @@ export default {
   operationFailed: '操作に失敗しました',
   noData: 'データがありません',
   retry: '再試行',
+  loadFailed: '読み込みに失敗しました',
   commandPalette: 'コマンドパレット',
   commandPlaceholder: 'ページまたはアクションを検索…',
   noResults: '一致する結果がありません',
@@ -52,5 +53,13 @@ export default {
     requestFailed: 'リクエストに失敗しました',
     networkError: 'ネットワークエラー',
     buildRequestFailed: 'ビルドリクエストに失敗しました（HTTP {status}）'
+  },
+  dirPicker: {
+    title: 'ディレクトリを選択',
+    parent: '上へ',
+    refresh: '更新',
+    empty: 'サブディレクトリがありません',
+    loadFailed: 'ディレクトリの読み取りに失敗しました',
+    selectCurrent: '現在のディレクトリを選択'
   }
 }

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, computed, nextTick, watch, h } from 'vue'
-import { NGrid, NGi, NTabs, NTabPane, NButton, NSelect, NProgress } from 'naive-ui'
+import { NGrid, NGi, NTabs, NTabPane, NButton, NSelect, NProgress, NEmpty } from 'naive-ui'
 import { useMessage } from '@/composables/useMessage'
 // echarts 按需引入：只注册实际用到的图表和组件，减小包体积
 import * as echarts from 'echarts/core'
@@ -153,7 +153,7 @@ function updateChart(data?: { timestamp: number; cpu: number; memory: number }[]
         params.forEach((p: any) => {
           const v = p.value[1]
           html += `<div style="display:flex;align-items:center;gap:var(--space-2)">
-            <span style="width:8px;height:8px;border-radius:50%;background:${p.color}"></span>
+            <span style="width: var(--led-size); height: var(--led-size); border-radius: 50%; background: ${p.color}"></span>
             ${p.seriesName}: <span style="font-family:monospace;font-weight:600">${v == null ? '—' : v.toFixed(1) + '%'}</span>
           </div>`
         })
@@ -523,8 +523,8 @@ watch(
         <PageCard :title="t('monitor.procList')" :subtitle="t('monitor.procListSubtitle')">
           <template #extra>
             <div class="monitor__toolbar">
-              <NSelect v-model:value="procSort" :options="sortOptions" size="small" style="width: 110px" @update:value="loadProcesses" />
-              <NSelect v-model:value="procTop" :options="topOptions" size="small" style="width: 110px" @update:value="loadProcesses" />
+              <NSelect v-model:value="procSort" :options="sortOptions" size="small" style="width: var(--input-sm)" @update:value="loadProcesses" />
+              <NSelect v-model:value="procTop" :options="topOptions" size="small" style="width: var(--input-sm)" @update:value="loadProcesses" />
             </div>
           </template>
           <DataTable
@@ -541,7 +541,10 @@ watch(
       <!-- Tab 2: 磁盘分析 -->
       <NTabPane name="disk" :tab="t('monitor.tabDisk')">
         <PageCard :title="t('monitor.diskUsageTitle')" :subtitle="t('monitor.diskUsageSubtitle')" :loading="disksLoading">
-          <div class="disk-list">
+          <div v-if="disks.length === 0 && !disksLoading" class="monitor__empty">
+            <NEmpty :description="t('common.noData')" size="small" />
+          </div>
+          <div v-else class="disk-list">
             <div v-for="d in disks" :key="d.mount_point" class="disk-item">
               <div class="disk-item__header">
                 <div class="disk-item__mount">
@@ -630,6 +633,13 @@ watch(
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
+}
+
+/* 列表空态：与磁盘项保持同宽居中，避免空白塌陷 */
+.monitor__empty {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-6) 0;
 }
 
 .disk-item__header {

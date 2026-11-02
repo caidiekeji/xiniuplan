@@ -63,7 +63,9 @@ export default {
   },
   rules: {
     domainRequired: 'メインドメインを入力してください',
-    rootDirRequired: 'サイトのルートディレクトリを入力してください',
+    domainInvalid: 'ドメインの形式が正しくありません（例: example.com または *.example.com）',
+    aliasesInvalid: '形式が正しくないバインドドメインがあります',
+    rootDirRequired: 'サイトのルートディレクトリを入力または選択してください',
     runtimeRequired: '実行環境を選択してください',
     proxyTargetRequired: 'リバースプロキシの送信先を入力してください'
   },
@@ -80,6 +82,8 @@ export default {
     proxyTargetLabel: 'リバースプロキシ送信先',
     proxyTargetPlaceholder: '例: http://127.0.0.1:3000',
     rootDirLabel: 'サイトのルートディレクトリ',
+    rootDirBrowse: '参照',
+    rootDirHint: '絶対パスを直接入力するか、「参照」からサーバー上のディレクトリを選択できます',
     remarkLabel: '備考',
     remarkPlaceholder: '任意の備考'
   },

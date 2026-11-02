@@ -63,7 +63,9 @@ export default {
   },
   rules: {
     domainRequired: 'Please enter the primary domain',
-    rootDirRequired: 'Please enter the site root directory',
+    domainInvalid: 'Invalid domain format (e.g. example.com or *.example.com)',
+    aliasesInvalid: 'Some alias domains have an invalid format',
+    rootDirRequired: 'Please enter or select the site root directory',
     runtimeRequired: 'Please select a runtime',
     proxyTargetRequired: 'Please enter the reverse proxy target'
   },
@@ -80,6 +82,8 @@ export default {
     proxyTargetLabel: 'Reverse Proxy Target',
     proxyTargetPlaceholder: 'e.g. http://127.0.0.1:3000',
     rootDirLabel: 'Site Root Directory',
+    rootDirBrowse: 'Browse',
+    rootDirHint: 'Enter an absolute path manually, or click "Browse" to pick a directory on the server',
     remarkLabel: 'Remark',
     remarkPlaceholder: 'Optional remark'
   },

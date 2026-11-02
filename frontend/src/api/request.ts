@@ -9,6 +9,31 @@ export interface ApiResponse<T = any> {
   data: T
 }
 
+/**
+ * 业务错误对象：在原生 Error 上补充 HTTP 状态码与业务码。
+ * 页面据此区分「接口不存在（404/501，旧版后端未实现）」与「临时故障（网络/5xx）」，
+ * 避免把一次网络抖动误报成「当前后端版本不支持该功能」。
+ */
+export interface ApiError extends Error {
+  /** HTTP 状态码；网络层错误（无响应）时为 undefined */
+  status?: number
+  /** 业务状态码（后端统一响应体 code 字段） */
+  code?: number
+}
+
+function toApiError(message: string, status?: number, code?: number): ApiError {
+  const err = new Error(message) as ApiError
+  if (status !== undefined) err.status = status
+  if (code !== undefined) err.code = code
+  return err
+}
+
+/** 判断错误是否为「接口未实现」（旧版后端缺该路由） */
+export function isApiUnsupported(err: unknown): boolean {
+  const status = (err as ApiError)?.status
+  return status === 404 || status === 501
+}
+
 const service: AxiosInstance = axios.create({
   // 安全入口模式下 __PANEL_BASE__ 为 /{entry}，否则为空字符串
   baseURL: `${(window as any).__PANEL_BASE__ || ''}/api/v1`,
@@ -56,7 +81,7 @@ service.interceptors.response.use(
           router.push('/change-password')
         }
       }
-      return Promise.reject(new Error(res.message || i18n.global.t('common.errors.requestFailed')))
+      return Promise.reject(toApiError(res.message || i18n.global.t('common.errors.requestFailed'), response.status, res.code))
     }
     return res as unknown as AxiosResponse
   },
@@ -75,7 +100,7 @@ service.interceptors.response.use(
       }
     }
     const message = error.response?.data?.message || error.message || i18n.global.t('common.errors.networkError')
-    return Promise.reject(new Error(message))
+    return Promise.reject(toApiError(message, error.response?.status, error.response?.data?.code))
   }
 )
 

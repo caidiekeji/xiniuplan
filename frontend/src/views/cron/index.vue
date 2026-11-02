@@ -759,7 +759,7 @@ onMounted(() => {
   <!-- 执行日志抽屉 -->
   <NDrawer
     :show="showLogs"
-    :width="780"
+    :width="'var(--drawer-width)'"
     placement="right"
     @update:show="(v: boolean) => (showLogs = v)"
   >

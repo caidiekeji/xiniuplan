@@ -9,6 +9,7 @@ export { default as StatusTag } from './StatusTag.vue'
 export type { StatusType } from './StatusTag.vue'
 export { default as StatCard } from './StatCard.vue'
 export { default as ConfirmDialog } from './ConfirmDialog.vue'
+export { default as DirectoryPicker } from './DirectoryPicker.vue'
 export { default as CommandPalette } from './CommandPalette.vue'
 
 // CodeEditor 依赖 monaco-editor（体积大），改为异步加载：

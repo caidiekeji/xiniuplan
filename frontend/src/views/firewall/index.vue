@@ -28,6 +28,8 @@ const { t } = useI18n()
 const rulesLoading = ref(false)
 const rules = ref<FirewallRule[]>([])
 const rulesTotal = ref(0)
+/** 规则加载失败信息：非空时表格区渲染错误面板（含重试） */
+const rulesError = ref<string | null>(null)
 const rulesPage = ref(1)
 const rulesPageSize = ref(20)
 const ruleTypeFilter = ref<RuleType | null>(null)
@@ -157,6 +159,7 @@ const ruleColumns = computed<DataTableColumns>(() => [
 
 async function loadRules() {
   rulesLoading.value = true
+  rulesError.value = null
   try {
     const res = await getFirewallRules(rulesPage.value, rulesPageSize.value, ruleTypeFilter.value || undefined)
     if (res.data?.items) {
@@ -169,6 +172,7 @@ async function loadRules() {
   } catch (e: any) {
     rules.value = []
     rulesTotal.value = 0
+    rulesError.value = e.message || t('firewall.loadRulesFailed')
     message.error(e.message || t('firewall.loadRulesFailed'))
   } finally {
     rulesLoading.value = false
@@ -335,7 +339,7 @@ onMounted(() => {
               :placeholder="t('firewall.allTypes')"
               clearable
               size="small"
-              style="width: 140px"
+              style="width: var(--input-sm)"
               :options="typeOptions"
               @update:value="() => { rulesPage = 1; loadRules() }"
             />
@@ -346,6 +350,8 @@ onMounted(() => {
             :data="rules"
             :loading="rulesLoading"
             :row-key="(row: any) => row.id"
+            :error="rulesError"
+            @retry="loadRules"
             :pagination="{
               page: rulesPage,
               pageSize: rulesPageSize,

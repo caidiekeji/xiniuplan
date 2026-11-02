@@ -27,6 +27,8 @@ const activeTab = useQueryState('tab', 'operations')
 /* ==================== Tab 1: 操作日志 ==================== */
 
 const auditLoading = ref(false)
+/** 各表加载失败信息：非空时对应表格区渲染错误面板（含重试） */
+const auditError = ref<string | null>(null)
 const auditLogs = ref<AuditLog[]>([])
 const auditTotal = ref(0)
 const auditPage = useQueryState('page', 1)
@@ -100,6 +102,7 @@ const auditColumns = computed(() => [
 
 async function loadAuditLogs() {
   auditLoading.value = true
+  auditError.value = null
   try {
     const params: any = {
       page: auditPage.value,
@@ -123,6 +126,7 @@ async function loadAuditLogs() {
   } catch (e: any) {
     auditLogs.value = []
     auditTotal.value = 0
+    auditError.value = e.message || t('audit.messages.loadAuditFailed')
     message.error(e.message || t('audit.messages.loadAuditFailed'))
   } finally {
     auditLoading.value = false
@@ -146,6 +150,7 @@ function handleReset() {
 
 const loginLoading = ref(false)
 const loginLogs = ref<LoginLog[]>([])
+const loginError = ref<string | null>(null)
 const loginTotal = ref(0)
 const loginPage = useQueryState('loginPage', 1)
 const loginPageSize = ref(20)
@@ -177,6 +182,7 @@ const loginColumns = computed(() => [
 
 async function loadLoginLogs() {
   loginLoading.value = true
+  loginError.value = null
   try {
     const res = await getLoginLogs(loginPage.value, loginPageSize.value)
     if (res.data?.items) {
@@ -189,6 +195,7 @@ async function loadLoginLogs() {
   } catch (e: any) {
     loginLogs.value = []
     loginTotal.value = 0
+    loginError.value = e.message || t('audit.messages.loadLoginFailed')
     message.error(e.message || t('audit.messages.loadLoginFailed'))
   } finally {
     loginLoading.value = false
@@ -221,13 +228,16 @@ onMounted(() => {
 const NTagComp = NTag
 const anomalies = ref<AnomalyEvent[]>([])
 const anomalyLoading = ref(false)
+const anomalyError = ref<string | null>(null)
 
 async function loadAnomalies() {
   anomalyLoading.value = true
+  anomalyError.value = null
   try {
     const res = await listAnomalies()
     anomalies.value = res.items || []
   } catch (e: any) {
+    anomalyError.value = e.message || t('audit.messages.detectFailed')
     message.error(e.message || t('audit.messages.detectFailed'))
   } finally {
     anomalyLoading.value = false
@@ -267,15 +277,15 @@ onMounted(loadAnomalies)
             <div class="audit__search-row">
               <div class="audit__search-item">
                 <label class="audit__search-label">{{ t('audit.audit.userId') }}</label>
-                <NInput v-model:value="searchForm.user_id" name="user_id" :placeholder="t('audit.audit.userIdPlaceholder')" size="small" style="width: 120px" />
+                <NInput v-model:value="searchForm.user_id" name="user_id" :placeholder="t('audit.audit.userIdPlaceholder')" size="small" style="width: var(--input-sm)" />
               </div>
               <div class="audit__search-item">
                 <label class="audit__search-label">{{ t('audit.audit.actionType') }}</label>
-                <NSelect v-model:value="searchForm.action" name="action" :options="actionOptions" size="small" style="width: 150px" />
+                <NSelect v-model:value="searchForm.action" name="action" :options="actionOptions" size="small" style="width: var(--input-md)" />
               </div>
               <div class="audit__search-item">
                 <label class="audit__search-label">{{ t('audit.audit.result') }}</label>
-                <NSelect v-model:value="searchForm.result" name="result" :options="resultOptions as any" size="small" style="width: 110px" />
+                <NSelect v-model:value="searchForm.result" name="result" :options="resultOptions as any" size="small" style="width: var(--input-sm)" />
               </div>
               <div class="audit__search-item">
                 <label class="audit__search-label">{{ t('audit.audit.timeRange') }}</label>
@@ -283,7 +293,7 @@ onMounted(loadAnomalies)
                   v-model:value="searchForm.time_range"
                   type="datetimerange"
                   size="small"
-                  style="width: 360px; max-width: 100%"
+                  style="width: var(--input-3xl); max-width: 100%"
                 />
               </div>
             </div>
@@ -294,6 +304,8 @@ onMounted(loadAnomalies)
             :data="auditLogs"
             :loading="auditLoading"
             :row-key="(row: any) => row.id"
+            :error="auditError"
+            @retry="loadAuditLogs"
             :pagination="{
               page: auditPage,
               pageSize: auditPageSize,
@@ -318,6 +330,8 @@ onMounted(loadAnomalies)
             :data="anomalies"
             :loading="anomalyLoading"
             :row-key="(row: any) => row.type + row.subject"
+            :error="anomalyError"
+            @retry="loadAnomalies"
           />
         </PageCard>
       </NTabPane>
@@ -339,6 +353,8 @@ onMounted(loadAnomalies)
             :data="loginLogs"
             :loading="loginLoading"
             :row-key="(row: any) => row.id"
+            :error="loginError"
+            @retry="loadLoginLogs"
             :pagination="{
               page: loginPage,
               pageSize: loginPageSize,

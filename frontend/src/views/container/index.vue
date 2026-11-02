@@ -799,7 +799,7 @@ function openExec(row: any) {
     <!-- 日志抽屉 -->
     <NDrawer
       :show="logDrawerVisible"
-      :width="720"
+      :width="'var(--drawer-width)'"
       placement="right"
       @update:show="(v: boolean) => { if (!v) closeLogDrawer() }"
     >

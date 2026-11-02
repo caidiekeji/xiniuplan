@@ -21,6 +21,7 @@ export default {
   operationFailed: 'Operation failed',
   noData: 'No data',
   retry: 'Retry',
+  loadFailed: 'Failed to load',
   commandPalette: 'Command palette',
   commandPlaceholder: 'Search pages or actions…',
   noResults: 'No results',
@@ -52,5 +53,13 @@ export default {
     requestFailed: 'Request failed',
     networkError: 'Network error',
     buildRequestFailed: 'Build request failed (HTTP {status})'
+  },
+  dirPicker: {
+    title: 'Select Directory',
+    parent: 'Up',
+    refresh: 'Refresh',
+    empty: 'No subdirectories here',
+    loadFailed: 'Failed to read directory',
+    selectCurrent: 'Select Current Directory'
   }
 }

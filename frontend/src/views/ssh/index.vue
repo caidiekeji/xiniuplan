@@ -32,6 +32,7 @@ import {
   type Fail2banStatus,
   type BannedIP
 } from '@/api/ssh'
+import { isApiUnsupported } from '@/api/request'
 
 const message = useMessage()
 const { t } = useI18n()
@@ -89,6 +90,8 @@ async function handleSaveConfig() {
 const keysLoading = ref(false)
 const sshKeys = ref<SSHKey[]>([])
 const keysApiAvailable = ref(true)
+/** 临时性加载失败（非「接口未实现」）：渲染错误面板 + 重试 */
+const keysError = ref<string | null>(null)
 
 const showAddKeyModal = ref(false)
 const addKeyLoading = ref(false)
@@ -148,14 +151,21 @@ const keyColumns = computed<DataTableColumns>(() => [
 
 async function loadSSHKeys() {
   keysLoading.value = true
+  keysError.value = null
   try {
     const res = await getSSHKeys()
     if (res.data && Array.isArray(res.data)) {
       sshKeys.value = res.data
       keysApiAvailable.value = true
     }
-  } catch {
-    keysApiAvailable.value = false
+  } catch (e: any) {
+    // 接口不存在（旧版后端）→ 提示版本不支持；其余失败 → 错误面板 + 重试
+    if (isApiUnsupported(e)) {
+      keysApiAvailable.value = false
+    } else {
+      keysError.value = e.message || t('common.loadFailed')
+    }
+    sshKeys.value = []
   } finally {
     keysLoading.value = false
   }
@@ -218,6 +228,8 @@ const logsPage = useQueryState('page', 1)
 const logsPageSize = ref(20)
 const logStatusFilter = useQueryState<'all' | 'success' | 'failed'>('status', 'all')
 const logsApiAvailable = ref(true)
+/** 临时性加载失败（非「接口未实现」）：渲染错误面板 + 重试 */
+const logsError = ref<string | null>(null)
 
 const logColumns = computed<DataTableColumns>(() => [
   {
@@ -268,6 +280,7 @@ const statusFilterOptions = computed(() => [
 
 async function loadSSHLogs() {
   logsLoading.value = true
+  logsError.value = null
   try {
     const res = await getSSHLogs(logsPage.value, logsPageSize.value)
     if (res.data?.items) {
@@ -279,11 +292,14 @@ async function loadSSHLogs() {
       logsTotal.value = res.data.total
       logsApiAvailable.value = true
     }
-  } catch {
-    logsApiAvailable.value = false
+  } catch (e: any) {
+    if (isApiUnsupported(e)) {
+      logsApiAvailable.value = false
+    } else {
+      logsError.value = e.message || t('common.loadFailed')
+    }
     loginLogs.value = []
     logsTotal.value = 0
-    message.error(t('ssh.logs.loadError'))
   } finally {
     logsLoading.value = false
   }
@@ -305,6 +321,8 @@ const f2bConfig = ref<Fail2banConfig>({
 })
 const f2bConfigSaving = ref(false)
 const f2bApiAvailable = ref(true)
+/** 临时性加载失败（非「接口未实现」）：渲染错误面板 + 重试 */
+const f2bError = ref<string | null>(null)
 
 const banIPInput = ref('')
 const banIPLoading = ref(false)
@@ -385,6 +403,7 @@ const bannedIPColumns = computed<DataTableColumns>(() => [
 
 async function loadFail2ban() {
   f2bLoading.value = true
+  f2bError.value = null
   try {
     const res = await getFail2banStatus()
     if (res.data) {
@@ -392,10 +411,13 @@ async function loadFail2ban() {
       f2bConfig.value.enabled = res.data.enabled
       f2bApiAvailable.value = true
     }
-  } catch {
-    f2bApiAvailable.value = false
-    f2bStatus.value = { enabled: false, installed: false, banned_ips: [] }
-    message.error(t('ssh.fail2ban.loadError'))
+  } catch (e: any) {
+    if (isApiUnsupported(e)) {
+      f2bApiAvailable.value = false
+      f2bStatus.value = { enabled: false, installed: false, banned_ips: [] }
+    } else {
+      f2bError.value = e.message || t('common.loadFailed')
+    }
   } finally {
     f2bLoading.value = false
   }
@@ -479,7 +501,7 @@ onMounted(() => {
                 :min="1"
                 :max="65535"
                 placeholder="22"
-                style="max-width: 200px"
+                style="max-width: var(--input-lg)"
               />
               <NText depth="3" style="margin-left: var(--space-3); font-size: var(--fs-caption)">
                 {{ t('ssh.form.portHint') }}
@@ -524,7 +546,7 @@ onMounted(() => {
                 :min="1"
                 :max="20"
                 placeholder="6"
-                style="max-width: 200px"
+                style="max-width: var(--input-lg)"
               />
             </NFormItem>
 
@@ -533,7 +555,7 @@ onMounted(() => {
                 v-model:value="sshConfig.client_alive_interval"
                 :min="0"
                 placeholder="0"
-                style="max-width: 200px"
+                style="max-width: var(--input-lg)"
               />
               <NText depth="3" style="margin-left: var(--space-3); font-size: var(--fs-caption)">
                 {{ t('ssh.form.clientAliveHint') }}
@@ -544,7 +566,7 @@ onMounted(() => {
               <NInput
                 v-model:value="sshConfig.allow_users"
                 :placeholder="t('ssh.form.allowUsersPlaceholder')"
-                style="max-width: 400px"
+                style="max-width: var(--content-max-sm)"
               />
             </NFormItem>
 
@@ -591,6 +613,8 @@ onMounted(() => {
             :loading="keysLoading"
             :row-key="(row: SSHKey) => row.fingerprint"
             :pagination="false"
+            :error="keysError"
+            @retry="loadSSHKeys"
           />
         </PageCard>
       </NTabPane>
@@ -603,7 +627,7 @@ onMounted(() => {
               v-model:value="logStatusFilter"
               :placeholder="t('ssh.logs.statusPlaceholder')"
               size="small"
-              style="width: 140px"
+              style="width: var(--input-sm)"
               :options="statusFilterOptions"
               @update:value="() => { logsPage = 1; loadSSHLogs() }"
             />
@@ -624,6 +648,8 @@ onMounted(() => {
             :loading="logsLoading"
             :row-key="(row: any) => `${row.time}-${row.ip}`"
             :row-props="logRowProps"
+            :error="logsError"
+            @retry="loadSSHLogs"
             :pagination="{
               page: logsPage,
               pageSize: logsPageSize,
@@ -677,7 +703,7 @@ onMounted(() => {
                 :min="1"
                 :max="20"
                 placeholder="5"
-                style="max-width: 200px"
+                style="max-width: var(--input-lg)"
               />
             </NFormItem>
             <NFormItem :label="t('ssh.form.banDuration')">
@@ -685,7 +711,7 @@ onMounted(() => {
                 v-model:value="f2bConfig.ban_time"
                 :min="1"
                 placeholder="10"
-                style="max-width: 200px"
+                style="max-width: var(--input-lg)"
               />
             </NFormItem>
             <NFormItem :label="t('ssh.form.findWindow')">
@@ -693,7 +719,7 @@ onMounted(() => {
                 v-model:value="f2bConfig.find_time"
                 :min="1"
                 placeholder="10"
-                style="max-width: 200px"
+                style="max-width: var(--input-lg)"
               />
             </NFormItem>
             <NFormItem>
@@ -714,12 +740,12 @@ onMounted(() => {
             <NInput
               v-model:value="banIPInput"
               :placeholder="t('ssh.fail2ban.ipPlaceholder')"
-              style="width: 260px"
+              style="width: var(--input-2xl)"
             />
             <NInput
               v-model:value="banReasonInput"
               :placeholder="t('ssh.fail2ban.reasonPlaceholder')"
-              style="width: 220px"
+              style="width: var(--input-xl)"
             />
             <NButton
               type="error"
@@ -742,6 +768,8 @@ onMounted(() => {
             :loading="f2bLoading"
             :row-key="(row: BannedIP) => row.ip"
             :pagination="false"
+            :error="f2bError"
+            @retry="loadFail2ban"
           />
         </PageCard>
       </NTabPane>

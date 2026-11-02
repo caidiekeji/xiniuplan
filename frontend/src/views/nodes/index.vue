@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import {
-  NButton, NIcon, NForm, NFormItem, NInput, NSpace, NCard, NSpin
+  NButton, NIcon, NForm, NFormItem, NInput, NSpace, NCard, NSpin, NSkeleton
 } from 'naive-ui'
 import { useMessage } from '@/composables/useMessage'
 import { AddOutline, RefreshOutline, PlayOutline, PauseOutline, TrashOutline } from '@vicons/ionicons5'
@@ -50,6 +50,15 @@ function usageColor(pct: number): string {
 
 function usagePct(v: number): number {
   return Math.min(100, Math.max(0, Math.round(Number(v) || 0)))
+}
+
+/**
+ * 进度条填充比例。
+ * 用 transform: scaleX 而非 width —— width 动画每帧触发布局重排（主线程开销），
+ * scaleX 只走合成器，动画更顺滑（审查报告 P1）。
+ */
+function usageScale(v: number): string {
+  return `scaleX(${usagePct(v) / 100})`
 }
 
 /* ==================== 列表 ==================== */
@@ -184,7 +193,15 @@ onBeforeUnmount(() => {
     <p class="page-tip">{{ t('nodes.pageTip') }}</p>
 
     <NSpin :show="loading">
-      <div v-if="nodes.length" class="node-grid">
+      <!-- 加载期骨架卡片网格：结构与真实节点卡一致，避免首屏空白（审查报告骨架屏维度） -->
+      <div v-if="loading" class="node-grid" aria-hidden="true">
+        <NCard v-for="i in 4" :key="`sk-${i}`" size="small" class="node-card">
+          <NSkeleton height="17px" width="45%" :sharp="false" />
+          <NSkeleton height="13px" width="70%" :sharp="false" style="margin-top: var(--space-2)" />
+          <NSkeleton height="13px" width="55%" :sharp="false" style="margin-top: var(--space-1)" />
+        </NCard>
+      </div>
+      <div v-else-if="nodes.length" class="node-grid">
         <NCard v-for="node in nodes" :key="node.id" size="small" class="node-card">
           <div class="node-head">
             <span class="node-name">{{ node.name }}</span>
@@ -199,17 +216,17 @@ onBeforeUnmount(() => {
           <div class="usage-list">
             <div class="usage-row">
               <span class="usage-label">CPU</span>
-              <div class="usage-bar"><div class="usage-fill" :style="{ width: usagePct(node.cpu_percent) + '%', background: usageColor(node.cpu_percent) }" /></div>
+              <div class="usage-bar"><div class="usage-fill" :style="{ transform: usageScale(node.cpu_percent), background: usageColor(node.cpu_percent) }" /></div>
               <span class="usage-val mono">{{ usagePct(node.cpu_percent) }}%</span>
             </div>
             <div class="usage-row">
               <span class="usage-label">{{ t('nodes.labelMem') }}</span>
-              <div class="usage-bar"><div class="usage-fill" :style="{ width: usagePct(node.mem_percent) + '%', background: usageColor(node.mem_percent) }" /></div>
+              <div class="usage-bar"><div class="usage-fill" :style="{ transform: usageScale(node.mem_percent), background: usageColor(node.mem_percent) }" /></div>
               <span class="usage-val mono">{{ usagePct(node.mem_percent) }}%</span>
             </div>
             <div class="usage-row">
               <span class="usage-label">{{ t('nodes.labelDisk') }}</span>
-              <div class="usage-bar"><div class="usage-fill" :style="{ width: usagePct(node.disk_percent) + '%', background: usageColor(node.disk_percent) }" /></div>
+              <div class="usage-bar"><div class="usage-fill" :style="{ transform: usageScale(node.disk_percent), background: usageColor(node.disk_percent) }" /></div>
               <span class="usage-val mono">{{ usagePct(node.disk_percent) }}%</span>
             </div>
           </div>
@@ -344,8 +361,11 @@ onBeforeUnmount(() => {
 }
 .usage-fill {
   height: 100%;
+  width: 100%;
   border-radius: var(--radius-sm);
-  transition: width var(--t-normal) var(--ease);
+  transform-origin: left center;
+  transition: transform var(--t-normal) var(--ease);
+  will-change: transform;
 }
 .usage-val {
   width: 42px;

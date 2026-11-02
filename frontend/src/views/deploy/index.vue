@@ -341,7 +341,15 @@ onMounted(load)
       <p>{{ t('deploy.logs.empty') }}</p>
     </div>
     <div v-for="log in logs" :key="log.id" class="log-item">
-      <div class="log-item__head" @click="expandedLogId = expandedLogId === log.id ? null : log.id">
+      <div
+        class="log-item__head"
+        role="button"
+        tabindex="0"
+        :aria-expanded="expandedLogId === log.id"
+        @click="expandedLogId = expandedLogId === log.id ? null : log.id"
+        @keydown.enter.prevent="expandedLogId = expandedLogId === log.id ? null : log.id"
+        @keydown.space.prevent="expandedLogId = expandedLogId === log.id ? null : log.id"
+      >
         <StatusTag
           :status="log.status === 'success' ? 'running' : 'error'"
           :text="log.status === 'success' ? t('deploy.status.success') : t('deploy.status.failed')"

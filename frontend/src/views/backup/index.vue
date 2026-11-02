@@ -64,6 +64,8 @@ function formatFileSize(bytes: number): string {
 const loading = ref(false)
 const backups = ref<Backup[]>([])
 const total = ref(0)
+/** 加载失败信息：非空时表格区渲染错误面板（含重试） */
+const loadError = ref<string | null>(null)
 const page = useQueryState('page', 1)
 const pageSize = ref(20)
 const searchKeyword = useQueryState('kw', '')
@@ -72,6 +74,7 @@ const filterType = useQueryState<BackupType | ''>('type', '')
 /* ========== Mock 数据兜底 ========== */
 async function loadBackups() {
   loading.value = true
+  loadError.value = null
   try {
     const params: BackupListParams = {
       page: page.value,
@@ -91,6 +94,7 @@ async function loadBackups() {
   } catch (e: any) {
     backups.value = []
     total.value = 0
+    loadError.value = e.message || t('backup.messages.loadFailed')
     message.error(e.message || t('backup.messages.loadFailed'))
   } finally {
     loading.value = false
@@ -524,6 +528,8 @@ async function doCreateRemote() {
       :data="backups"
       :loading="loading"
       :pagination="pagination"
+      :error="loadError"
+      @retry="loadBackups"
     >
       <!-- 空态引导（词表 D15）：无筛选条件的首次空态给创建入口；筛选空结果只显示「暂无数据」 -->
       <template #empty>

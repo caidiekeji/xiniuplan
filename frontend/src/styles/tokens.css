@@ -163,11 +163,17 @@
   --stat-value-min-height: 36px;
   --hover-lift: -2px;
   --search-width: 400px;
-  --drawer-width: 480px;
+  /* 抽屉宽度档位：常规抽屉 / 宽内容抽屉（代码编辑器、日志）
+     小屏由下方媒体查询统一降级为 100vw */
+  --drawer-width: min(720px, 100vw);
+  --drawer-width-lg: min(960px, 100vw);
   --modal-width-sm: min(480px, 92vw);
   --modal-width-md: min(560px, 92vw);
   --modal-width-lg: min(800px, 92vw);
   --modal-width-xl: min(960px, 94vw);
+  /* 表单内容区最大宽度：长表单不铺满整屏，便于阅读与聚焦 */
+  --content-max-sm: 400px;
+  --content-max-md: 640px;
   --input-sm: 140px;
   --input-md: 160px;
   --input-lg: 200px;
@@ -313,6 +319,7 @@
     --editor-height: 300px;
     --stat-value-min-height: 28px;
     --drawer-width: 100vw;
+    --drawer-width-lg: 100vw;
     --modal-width-sm: 92vw;
     --modal-width-md: 92vw;
     --modal-width-lg: 94vw;

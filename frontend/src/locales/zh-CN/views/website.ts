@@ -63,7 +63,9 @@ export default {
   },
   rules: {
     domainRequired: '请输入主域名',
-    rootDirRequired: '请输入网站根目录',
+    domainInvalid: '域名格式不正确（例如 example.com 或 *.example.com）',
+    aliasesInvalid: '存在格式不正确的绑定域名',
+    rootDirRequired: '请输入或选择网站根目录',
     runtimeRequired: '请选择运行环境',
     proxyTargetRequired: '请输入反向代理目标'
   },
@@ -80,6 +82,8 @@ export default {
     proxyTargetLabel: '反向代理目标',
     proxyTargetPlaceholder: '例如 http://127.0.0.1:3000',
     rootDirLabel: '网站根目录',
+    rootDirBrowse: '浏览',
+    rootDirHint: '可手动输入服务器绝对路径，或点击「浏览」选择目录',
     remarkLabel: '备注',
     remarkPlaceholder: '可选备注信息'
   },

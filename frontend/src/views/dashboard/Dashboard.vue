@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, computed, nextTick, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { NGrid, NGi, NSpace, NButton } from 'naive-ui'
+import { NGrid, NGi, NSpace, NButton, NSkeleton } from 'naive-ui'
 // echarts 按需引入：只注册实际用到的图表和组件，减小包体积
 import * as echarts from 'echarts/core'
 import { LineChart } from 'echarts/charts'
@@ -144,7 +144,7 @@ function updateChart(data?: { timestamp: number; cpu: number; memory: number }[]
         params.forEach((p: any) => {
           const v = p.value[1]
           html += `<div style="display:flex;align-items:center;gap:var(--space-2)">
-            <span style="width:8px;height:8px;border-radius:50%;background:${p.color}"></span>
+            <span style="width: var(--led-size); height: var(--led-size); border-radius: 50%; background: ${p.color}"></span>
             ${p.seriesName}: <span style="font-family:monospace;font-weight:600">${v == null ? '—' : v.toFixed(1) + '%'}</span>
           </div>`
         })
@@ -400,29 +400,45 @@ watch(locale, () => {
               </NButton>
             </NSpace>
           </template>
-          <div ref="chartRef" class="dashboard__chart" role="img" :aria-label="chartAriaLabel" />
+          <!-- 图表容器始终挂载（ECharts 需要真实尺寸初始化），加载期用骨架覆盖层遮罩，
+               避免首屏出现「空白图表区」；不用 PageCard 的 loading 骨架，否则 chartRef 不存在会导致图表永久失效 -->
+          <div class="dashboard__chart-wrap">
+            <div ref="chartRef" class="dashboard__chart" role="img" :aria-label="chartAriaLabel" />
+            <div v-if="loading" class="dashboard__chart-loading" aria-hidden="true">
+              <NSkeleton height="100%" :sharp="false" />
+            </div>
+          </div>
         </PageCard>
       </NGi>
       <NGi :span="3" class="dashboard__audit-col">
         <PageCard :title="t('dashboard.recentOperations')" :subtitle="t('dashboard.recentOperationsSubtitle')">
           <div class="audit-list audit-list--horizontal">
-            <div v-for="log in auditLogs" :key="log.id" class="audit-item">
-              <div class="audit-item__top">
-                <span class="audit-item__action">{{ log.action }}</span>
-                <StatusTag :status="log.result === 'success' ? 'running' : 'error'" :text="log.result === 'success' ? t('common.success') : t('common.failed')" />
+            <!-- 加载期骨架占位，避免首屏该区域空白 -->
+            <template v-if="loading">
+              <div v-for="i in 3" :key="`sk-${i}`" class="audit-item">
+                <NSkeleton height="16px" width="40%" :sharp="false" />
+                <NSkeleton height="14px" width="70%" :sharp="false" />
               </div>
-              <div class="audit-item__bottom">
-                <span class="audit-item__target">{{ log.target }}</span>
-                <span class="audit-item__time mono">{{ log.timestamp }}</span>
+            </template>
+            <template v-else>
+              <div v-for="log in auditLogs" :key="log.id" class="audit-item">
+                <div class="audit-item__top">
+                  <span class="audit-item__action">{{ log.action }}</span>
+                  <StatusTag :status="log.result === 'success' ? 'running' : 'error'" :text="log.result === 'success' ? t('common.success') : t('common.failed')" />
+                </div>
+                <div class="audit-item__bottom">
+                  <span class="audit-item__target">{{ log.target }}</span>
+                  <span class="audit-item__time mono">{{ log.timestamp }}</span>
+                </div>
+                <div class="audit-item__user">
+                  <span class="led" :class="log.user === 'system' ? 'led--offline' : 'led--ok'" />
+                  {{ log.user }}
+                </div>
               </div>
-              <div class="audit-item__user">
-                <span class="led" :class="log.user === 'system' ? 'led--offline' : 'led--ok'" />
-                {{ log.user }}
+              <div v-if="auditLogs.length === 0" class="audit-empty">
+                {{ t('dashboard.noOperationRecords') }}
               </div>
-            </div>
-            <div v-if="auditLogs.length === 0 && !loading" class="audit-empty">
-              {{ t('dashboard.noOperationRecords') }}
-            </div>
+            </template>
           </div>
         </PageCard>
       </NGi>
@@ -488,6 +504,19 @@ watch(locale, () => {
 .dashboard__chart {
   height: var(--chart-height);
   width: 100%;
+}
+
+/* 图表加载遮罩：绝对定位覆盖，图表本身保持挂载以保证 ECharts 尺寸正确 */
+.dashboard__chart-wrap {
+  position: relative;
+  width: 100%;
+}
+
+.dashboard__chart-loading {
+  position: absolute;
+  inset: 0;
+  background: var(--surface);
+  border-radius: var(--radius-md);
 }
 
 .audit-list {
@@ -627,7 +656,9 @@ watch(locale, () => {
     gap: var(--space-0);
   }
   .sysbar-label {
-    font-size: 10px;
+    /* 小屏不再压到 10px：低于 12px 的正文在移动端难以辨读，
+       改用 caption 档（12px）并配合字重保持信息层级 */
+    font-size: var(--fs-caption);
   }
   .sysbar-value {
     font-size: var(--fs-body);
@@ -660,7 +691,7 @@ watch(locale, () => {
 
   /* 图表头部按钮缩小 */
   .page-card__header-right .n-button {
-    font-size: 11px;
+    font-size: var(--fs-caption);
     padding: 0 var(--space-2);
   }
 

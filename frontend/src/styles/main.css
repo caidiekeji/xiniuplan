@@ -164,6 +164,30 @@ a:hover {
   opacity: 0;
 }
 
+/* ========== 按压反馈 ==========
+   naive-ui 按钮按下时只有透明度变化，缺少「按下去了」的物理感。
+   这里补一层轻微缩放（0.97），并保留 naive-ui 原有的颜色过渡参数，
+   避免整体覆盖导致 hover 变色失去过渡。 */
+.n-button:not(.n-button--disabled):not([disabled]) {
+  transition:
+    color .3s var(--ease),
+    background-color .3s var(--ease),
+    opacity .3s var(--ease),
+    border-color .3s var(--ease),
+    transform var(--t-fast) var(--ease);
+}
+
+.n-button:not(.n-button--disabled):not([disabled]):active {
+  transform: scale(0.97);
+}
+
+/* 触屏设备无 :active 悬停态，改为按压瞬间的轻微缩放反馈 */
+@media (hover: none) {
+  .n-button:not(.n-button--disabled):not([disabled]):active {
+    transform: scale(0.97);
+  }
+}
+
 /* 表单字段下的辅助说明文字
    此前 alert / appstore / website 各写一份 scoped 副本，样式一致但重复。
    收敛为全局类，新增页面直接用 class="form-hint" 即可。 */

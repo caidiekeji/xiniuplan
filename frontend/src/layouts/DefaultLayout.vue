@@ -344,7 +344,12 @@ onMounted(() => {
       <!-- 内容区（语义 landmark：main；每页由布局统一注入 h1 = 当前面包屑末级标题，D22） -->
       <main class="layout-content">
         <h1 class="sr-only">{{ breadcrumb[breadcrumb.length - 1] || t('auth.brandName') }}</h1>
-        <router-view />
+        <!-- 路由切换淡入淡出：启用 main.css 中既有的 .fade 过渡类，消除页面硬切（审查报告 P0） -->
+        <router-view v-slot="{ Component, route }">
+          <transition name="fade" mode="out-in">
+            <component :is="Component" :key="route.path" />
+          </transition>
+        </router-view>
       </main>
     </NLayout>
 

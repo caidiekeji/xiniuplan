@@ -2,7 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import {
   NButton, NIcon, NCard, NForm, NFormItem, NInput, NSelect,
-  NSpace, NTag
+  NSpace, NTag, NEmpty, NSkeleton
 , NTabs, NTabPane } from 'naive-ui'
 import { useMessage } from '@/composables/useMessage'
 import { SaveOutline, SparklesOutline } from '@vicons/ionicons5'
@@ -20,12 +20,21 @@ const activeTab = ref('score')
 
 /* ==================== 顶部安全评分 ==================== */
 const score = ref<SecurityScore | null>(null)
+/** 评分加载中：显示骨架占位，避免首屏空白 */
+const scoreLoading = ref(false)
+/** 评分加载失败：显示错误提示 + 重试 */
+const scoreError = ref<string | null>(null)
 
 async function loadScore() {
+  scoreLoading.value = true
+  scoreError.value = null
   try {
     score.value = await getSecurityScore()
-  } catch {
+  } catch (e: any) {
     score.value = null
+    scoreError.value = e.message || t('common.loadFailed')
+  } finally {
+    scoreLoading.value = false
   }
 }
 
@@ -126,7 +135,22 @@ onMounted(() => {
     <NTabs v-model:value="activeTab" type="line" animated class="ai-tabs">
     <!-- 安全评分 -->
     <NTabPane name="score" :tab="t('ai.tabs.score')">
-    <NCard v-if="score" class="section-card" size="small">
+    <!-- 加载中：骨架占位 -->
+    <NCard v-if="scoreLoading" class="section-card" size="small">
+      <div class="score-wrap">
+        <NSkeleton height="40px" width="120px" :sharp="false" />
+        <NSkeleton height="24px" width="60%" :sharp="false" />
+      </div>
+    </NCard>
+    <!-- 加载失败：错误提示 + 重试（不再白屏） -->
+    <NCard v-else-if="scoreError" class="section-card" size="small">
+      <NEmpty :description="scoreError" size="small">
+        <template #extra>
+          <NButton size="small" @click="loadScore">{{ t('common.retry') }}</NButton>
+        </template>
+      </NEmpty>
+    </NCard>
+    <NCard v-else-if="score" class="section-card" size="small">
       <div class="score-wrap">
         <div class="score-main">
           <span class="score-total">{{ score.total }}</span>
@@ -184,7 +208,7 @@ onMounted(() => {
       <NForm label-placement="top">
         <NSpace size="medium" style="width: 100%; margin-bottom: var(--space-3)">
           <NFormItem :label="t('ai.labelDiagType')" style="flex: 1; margin-bottom: 0">
-            <NSelect v-model:value="diagForm.type" :options="diagTypeOptions" style="width: 160px" />
+            <NSelect v-model:value="diagForm.type" :options="diagTypeOptions" style="width: var(--input-md)" />
           </NFormItem>
         </NSpace>
         <NFormItem :label="t('ai.labelContent')">

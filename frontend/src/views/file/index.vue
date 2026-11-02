@@ -95,6 +95,8 @@ function detectLanguage(name: string) {
 const currentPath = useQueryState('path', '/')
 const files = ref<FileItem[]>([])
 const loading = ref(false)
+/** 目录加载失败信息：非空时表格区渲染错误面板（含重试） */
+const loadError = ref<string | null>(null)
 const checkedKeys = ref<(string | number)[]>([])
 
 const searchKeyword = useQueryState('kw', '')
@@ -169,10 +171,12 @@ function handleTreeSelect(keys: (string | number)[]) {
 /* ==================== 列表加载 ==================== */
 async function loadList() {
   loading.value = true
+  loadError.value = null
   try {
     const res = await listFiles(currentPath.value)
     files.value = (res.data?.items || []).map((f) => ({ ...f, key: f.path }))
   } catch (e: any) {
+    loadError.value = e.message || t('file.messages.loadDirFailed')
     message.error(e.message || t('file.messages.loadDirFailed'))
     files.value = []
   } finally {
@@ -289,15 +293,22 @@ function openMkdir() {
   dialog.form.dirName = ''
   dialog.mkdir = true
 }
+const dialogLoading = reactive({
+  mkdir: false, mkfile: false, rename: false, move: false,
+  copy: false, compress: false, decompress: false
+})
+
 async function submitMkdir() {
   const name = dialog.form.dirName.trim()
   if (!name) { message.warning(t('file.messages.inputDirName')); return }
+  dialogLoading.mkdir = true
   try {
     await createDir(joinPath(currentPath.value, name))
     message.success(t('file.messages.dirCreated'))
     dialog.mkdir = false
     loadList()
   } catch (e: any) { message.error(e.message || t('file.messages.createFailed')) }
+  finally { dialogLoading.mkdir = false }
 }
 function openMkfile() {
   dialog.form.fileName = ''
@@ -307,12 +318,14 @@ function openMkfile() {
 async function submitMkfile() {
   const name = dialog.form.fileName.trim()
   if (!name) { message.warning(t('file.messages.inputFileName')); return }
+  dialogLoading.mkfile = true
   try {
     await createFile(joinPath(currentPath.value, name), dialog.form.fileContent)
     message.success(t('file.messages.fileCreated'))
     dialog.mkfile = false
     loadList()
   } catch (e: any) { message.error(e.message || t('file.messages.createFailed')) }
+  finally { dialogLoading.mkfile = false }
 }
 
 /* ==================== 重命名 / 移动 / 复制 ==================== */
@@ -326,12 +339,14 @@ async function submitRename() {
   const name = dialog.form.renameNewName.trim()
   if (!name) { message.warning(t('file.messages.inputNewName')); return }
   const newPath = joinPath(dirname(dialog.target.path), name)
+  dialogLoading.rename = true
   try {
     await renameFile(dialog.target.path, newPath)
     message.success(t('file.messages.renameSuccess'))
     dialog.rename = false
     loadList()
   } catch (e: any) { message.error(e.message || t('file.messages.renameFailed')) }
+  finally { dialogLoading.rename = false }
 }
 function openMove(paths: string[]) {
   dialog.srcPaths = paths
@@ -340,6 +355,7 @@ function openMove(paths: string[]) {
 }
 async function submitMove() {
   const dstDir = normalizePath(dialog.form.targetPath)
+  dialogLoading.move = true
   try {
     await Promise.all(dialog.srcPaths.map((src) => moveFile(src, joinPath(dstDir, basename(src)))))
     message.success(t('file.messages.moveSuccess'))
@@ -347,6 +363,7 @@ async function submitMove() {
     checkedKeys.value = []
     loadList()
   } catch (e: any) { message.error(e.message || t('file.messages.moveFailed')) }
+  finally { dialogLoading.move = false }
 }
 function openCopy(paths: string[]) {
   dialog.srcPaths = paths
@@ -355,6 +372,7 @@ function openCopy(paths: string[]) {
 }
 async function submitCopy() {
   const dstDir = normalizePath(dialog.form.targetPath)
+  dialogLoading.copy = true
   try {
     await Promise.all(dialog.srcPaths.map((src) => copyFile(src, joinPath(dstDir, basename(src)))))
     message.success(t('file.messages.copySuccess'))
@@ -362,6 +380,7 @@ async function submitCopy() {
     checkedKeys.value = []
     loadList()
   } catch (e: any) { message.error(e.message || t('file.messages.copyFailed')) }
+  finally { dialogLoading.copy = false }
 }
 
 /* ==================== 压缩 / 解压 ==================== */
@@ -374,6 +393,7 @@ function openCompress(paths: string[]) {
 async function submitCompress() {
   const dest = dialog.form.compressDest.trim()
   if (!dest) { message.warning(t('file.messages.inputTargetPath')); return }
+  dialogLoading.compress = true
   try {
     await compressFiles(dialog.srcPaths, dest, dialog.form.compressFormat)
     message.success(t('file.messages.compressSuccess'))
@@ -381,6 +401,7 @@ async function submitCompress() {
     checkedKeys.value = []
     loadList()
   } catch (e: any) { message.error(e.message || t('file.messages.compressFailed')) }
+  finally { dialogLoading.compress = false }
 }
 function openDecompress(row: FileItem) {
   dialog.target = row
@@ -390,12 +411,14 @@ function openDecompress(row: FileItem) {
 async function submitDecompress() {
   if (!dialog.target) return
   const dest = normalizePath(dialog.form.decompressDest)
+  dialogLoading.decompress = true
   try {
     await decompressFile(dialog.target.path, dest)
     message.success(t('file.messages.decompressSuccess'))
     dialog.decompress = false
     loadList()
   } catch (e: any) { message.error(e.message || t('file.messages.decompressFailed')) }
+  finally { dialogLoading.decompress = false }
 }
 
 /* ==================== 删除 ==================== */
@@ -724,6 +747,8 @@ onBeforeUnmount(() => {
           :loading="loading || searching"
           :pagination="false"
           :row-key="(row: FileItem) => row.path"
+          :error="loadError"
+          @retry="loadList"
           v-model:checkedRowKeys="checkedKeys"
           @rowDblclick="handleRowDblclick"
         />
@@ -732,7 +757,7 @@ onBeforeUnmount(() => {
   </PageCard>
 
   <!-- 回收站 -->
-  <NDrawer :show="showRecycle" :width="720" placement="right" @update:show="(v: boolean) => (showRecycle = v)">
+  <NDrawer :show="showRecycle" :width="'var(--drawer-width)'" placement="right" @update:show="(v: boolean) => (showRecycle = v)">
     <NDrawerContent :title="t('file.recycleTitle')" closable>
       <NAlert type="info" :bordered="false" style="margin-bottom: var(--space-3)">
         {{ t('file.recycle.alert') }}
@@ -748,9 +773,14 @@ onBeforeUnmount(() => {
   </NDrawer>
 
   <!-- 新建文件夹 -->
-  <ModalForm v-model:show="dialog.mkdir" :title="t('file.dialogs.mkdir.title')" @submit="submitMkdir">
+  <ModalForm
+    v-model:show="dialog.mkdir"
+    :title="t('file.dialogs.mkdir.title')"
+    :loading="dialogLoading.mkdir"
+    @submit="submitMkdir"
+  >
     <NFormItem :label="t('file.dialogs.mkdir.name')" required>
-      <NInput v-model:value="dialog.form.dirName" :placeholder="t('file.dialogs.mkdir.namePlaceholder')" @keyup.enter="submitMkdir" />
+      <NInput v-model:value="dialog.form.dirName" :placeholder="t('file.dialogs.mkdir.namePlaceholder')" />
     </NFormItem>
     <NFormItem :label="t('file.dialogs.mkdir.path')">
       <NInput :value="currentPath" readonly />
@@ -758,9 +788,15 @@ onBeforeUnmount(() => {
   </ModalForm>
 
   <!-- 新建文件 -->
-  <ModalForm v-model:show="dialog.mkfile" :title="t('file.dialogs.mkfile.title')" @submit="submitMkfile" :width="560">
+  <ModalForm
+    v-model:show="dialog.mkfile"
+    :title="t('file.dialogs.mkfile.title')"
+    :loading="dialogLoading.mkfile"
+    @submit="submitMkfile"
+    :width="560"
+  >
     <NFormItem :label="t('file.dialogs.mkfile.name')" required>
-      <NInput v-model:value="dialog.form.fileName" :placeholder="t('file.dialogs.mkfile.namePlaceholder')" @keyup.enter="submitMkfile" />
+      <NInput v-model:value="dialog.form.fileName" :placeholder="t('file.dialogs.mkfile.namePlaceholder')" />
     </NFormItem>
     <NFormItem :label="t('file.dialogs.mkfile.content')">
       <NInput v-model:value="dialog.form.fileContent" type="textarea" :rows="6" :placeholder="t('file.dialogs.mkfile.contentPlaceholder')" />
@@ -768,17 +804,27 @@ onBeforeUnmount(() => {
   </ModalForm>
 
   <!-- 重命名 -->
-  <ModalForm v-model:show="dialog.rename" :title="t('file.dialogs.rename.title')" @submit="submitRename">
+  <ModalForm
+    v-model:show="dialog.rename"
+    :title="t('file.dialogs.rename.title')"
+    :loading="dialogLoading.rename"
+    @submit="submitRename"
+  >
     <NFormItem :label="t('file.dialogs.rename.oldName')">
       <NInput :value="dialog.target?.name" readonly />
     </NFormItem>
     <NFormItem :label="t('file.dialogs.rename.newName')" required>
-      <NInput v-model:value="dialog.form.renameNewName" @keyup.enter="submitRename" />
+      <NInput v-model:value="dialog.form.renameNewName" />
     </NFormItem>
   </ModalForm>
 
   <!-- 移动 -->
-  <ModalForm v-model:show="dialog.move" :title="t('file.dialogs.move.title')" @submit="submitMove">
+  <ModalForm
+    v-model:show="dialog.move"
+    :title="t('file.dialogs.move.title')"
+    :loading="dialogLoading.move"
+    @submit="submitMove"
+  >
     <NFormItem :label="t('file.dialogs.move.source')">
       <NInput :value="dialog.srcPaths.join(', ')" readonly />
     </NFormItem>
@@ -788,7 +834,12 @@ onBeforeUnmount(() => {
   </ModalForm>
 
   <!-- 复制 -->
-  <ModalForm v-model:show="dialog.copy" :title="t('file.dialogs.copy.title')" @submit="submitCopy">
+  <ModalForm
+    v-model:show="dialog.copy"
+    :title="t('file.dialogs.copy.title')"
+    :loading="dialogLoading.copy"
+    @submit="submitCopy"
+  >
     <NFormItem :label="t('file.dialogs.copy.source')">
       <NInput :value="dialog.srcPaths.join(', ')" readonly />
     </NFormItem>
@@ -798,7 +849,12 @@ onBeforeUnmount(() => {
   </ModalForm>
 
   <!-- 压缩 -->
-  <ModalForm v-model:show="dialog.compress" :title="t('file.dialogs.compress.title')" @submit="submitCompress">
+  <ModalForm
+    v-model:show="dialog.compress"
+    :title="t('file.dialogs.compress.title')"
+    :loading="dialogLoading.compress"
+    @submit="submitCompress"
+  >
     <NFormItem :label="t('file.dialogs.compress.source')">
       <NInput :value="dialog.srcPaths.join(', ')" readonly />
     </NFormItem>
@@ -814,7 +870,12 @@ onBeforeUnmount(() => {
   </ModalForm>
 
   <!-- 解压 -->
-  <ModalForm v-model:show="dialog.decompress" :title="t('file.dialogs.decompress.title')" @submit="submitDecompress">
+  <ModalForm
+    v-model:show="dialog.decompress"
+    :title="t('file.dialogs.decompress.title')"
+    :loading="dialogLoading.decompress"
+    @submit="submitDecompress"
+  >
     <NFormItem :label="t('file.dialogs.decompress.archive')">
       <NInput :value="dialog.target?.path" readonly />
     </NFormItem>
@@ -870,7 +931,7 @@ onBeforeUnmount(() => {
   />
 
   <!-- 代码编辑器抽屉 -->
-  <NDrawer v-model:show="editor.show" :width="820" placement="right">
+  <NDrawer v-model:show="editor.show" :width="'var(--drawer-width-lg)'" placement="right">
     <NDrawerContent :title="t('file.dialogs.editor.title', { name: editor.name })" :closable="true">
       <div class="editor-meta">
         <span class="mono editor-meta__path">{{ editor.path }}</span>

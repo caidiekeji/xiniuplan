@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useMessage } from '@/composables/useMessage'
-import { NButton, NIcon, NEmpty, NSpin, NCard, NFormItem, NSwitch } from 'naive-ui'
+import { NButton, NIcon, NEmpty, NSpin, NCard, NFormItem, NSwitch, NSkeleton } from 'naive-ui'
 import { SettingsOutline, ExtensionPuzzleOutline } from '@vicons/ionicons5'
 import {
   PageCard, StatusTag, ModalForm, CodeEditor
@@ -146,8 +146,17 @@ onMounted(() => {
     </template>
 
     <NSpin :show="loading">
+      <!-- 加载期骨架卡片网格：替代纯转圈，视觉结构与真实内容一致（审查报告骨架屏维度） -->
+      <div v-if="loading" class="plugin-grid" aria-hidden="true">
+        <NCard v-for="i in 6" :key="`sk-${i}`" class="plugin-card">
+          <NSkeleton height="36px" width="36px" :sharp="false" circle />
+          <NSkeleton height="16px" width="55%" :sharp="false" style="margin-top: var(--space-3)" />
+          <NSkeleton height="13px" width="85%" :sharp="false" style="margin-top: var(--space-2)" />
+          <NSkeleton height="13px" width="45%" :sharp="false" style="margin-top: var(--space-1)" />
+        </NCard>
+      </div>
       <!-- 插件卡片网格 -->
-      <div v-if="plugins.length > 0" class="plugin-grid">
+      <div v-else-if="plugins.length > 0" class="plugin-grid">
         <NCard
           v-for="p in plugins"
           :key="p.name"

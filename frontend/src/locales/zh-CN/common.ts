@@ -21,6 +21,7 @@ export default {
   operationFailed: '操作失败',
   noData: '暂无数据',
   retry: '重试',
+  loadFailed: '加载失败',
   commandPalette: '命令面板',
   commandPlaceholder: '搜索页面或操作…',
   noResults: '无匹配结果',
@@ -52,5 +53,13 @@ export default {
     requestFailed: '请求失败',
     networkError: '网络错误',
     buildRequestFailed: '构建请求失败（HTTP {status}）'
+  },
+  dirPicker: {
+    title: '选择目录',
+    parent: '上一级',
+    refresh: '刷新',
+    empty: '此目录下没有子目录',
+    loadFailed: '读取目录失败',
+    selectCurrent: '选择当前目录'
   }
 }

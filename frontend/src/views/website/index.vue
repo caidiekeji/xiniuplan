@@ -1,17 +1,17 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, h } from 'vue'
 import {
-  NButton, NIcon, NForm, NFormItem, NInput, NSelect, NRadioGroup, NRadio,
+  NButton, NIcon, NForm, NFormItem, NInput, NInputGroup, NSelect, NRadioGroup, NRadio,
   NDynamicTags, NDrawer, NDrawerContent, NTag, NSpace, NCheckbox, NEmpty
   } from 'naive-ui'
 import { useMessage } from '@/composables/useMessage'
 import {
   AddOutline, PlayOutline, StopOutline, RefreshOutline,
-  SettingsOutline, DocumentTextOutline, TrashOutline, CreateOutline
+  SettingsOutline, DocumentTextOutline, TrashOutline, CreateOutline, FolderOpenOutline
 } from '@vicons/ionicons5'
 import {
   PageCard, DataTable, SearchForm, ModalForm, ContentModal, StatusTag,
-  ConfirmDialog, CodeEditor
+  ConfirmDialog, CodeEditor, DirectoryPicker
 } from '@/components'
 import { useQueryState } from '@/composables/useQueryState'
 import type { StatusType } from '@/components'
@@ -31,6 +31,8 @@ const message = useMessage()
 const loading = ref(false)
 const sites = ref<Site[]>([])
 const total = ref(0)
+/** 加载失败信息：非空时表格区渲染错误面板（含重试），区别于「暂无数据」 */
+const loadError = ref<string | null>(null)
 const page = useQueryState('page', 1)
 const pageSize = ref(20)
 
@@ -72,6 +74,7 @@ const runtimeOptions = [
 /* ========== Mock 数据（后端未就绪时兜底） ========== */
 async function loadSites() {
   loading.value = true
+  loadError.value = null
   try {
     const params: SiteListParams = {
       page: page.value,
@@ -92,6 +95,7 @@ async function loadSites() {
   } catch (e: any) {
     sites.value = []
     total.value = 0
+    loadError.value = e.message || t('website.messages.loadListFailed')
     message.error(e.message || t('website.messages.loadListFailed'))
   } finally {
     loading.value = false
@@ -310,16 +314,30 @@ const createForm = reactive<CreateSiteData>({
   remark: ''
 })
 
+/** 域名格式：可选通配符前缀 + 合法域名标签（与后端 validateDomain 语义对齐，宽松程度以提示为准） */
+const DOMAIN_RE = /^(\*\.)?[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/
+
 const createRules = computed(() => ({
   domain: {
     required: true,
-    message: t('website.rules.domainRequired'),
-    trigger: 'blur'
+    trigger: ['blur', 'input'],
+    validator: (_rule: unknown, value: string) => {
+      if (!value || !value.trim()) return new Error(t('website.rules.domainRequired'))
+      if (!DOMAIN_RE.test(value.trim())) return new Error(t('website.rules.domainInvalid'))
+      return true
+    }
+  },
+  aliases: {
+    trigger: ['change', 'blur'],
+    validator: () => {
+      const bad = (createForm.aliases || []).some((a) => a.trim() && !DOMAIN_RE.test(a.trim()))
+      return bad ? new Error(t('website.rules.aliasesInvalid')) : true
+    }
   },
   rootDir: {
     required: true,
     message: t('website.rules.rootDirRequired'),
-    trigger: 'blur'
+    trigger: ['blur', 'input']
   },
   runtime: {
     required: true,
@@ -366,6 +384,20 @@ function handleDomainInput() {
   }
 }
 
+/* ========== 目录选择（服务端目录浏览器） ========== */
+const showDirPicker = ref(false)
+const dirPickerInitial = ref('/')
+
+function openDirPicker() {
+  // 从当前填写的路径开始浏览；未填时从 /www 起步（与默认约定一致）
+  dirPickerInitial.value = createForm.rootDir?.trim() || '/www'
+  showDirPicker.value = true
+}
+
+function handleDirSelect(path: string) {
+  createForm.rootDir = path
+}
+
 async function handleCreateSubmit() {
   try {
     await createFormRef.value?.validate()
@@ -374,10 +406,11 @@ async function handleCreateSubmit() {
   }
 
   const data: CreateSiteData = {
-    domain: createForm.domain,
+    domain: createForm.domain.trim(),
     aliases: createForm.aliases,
     type: createForm.type,
-    rootDir: createForm.rootDir,
+    // 反向代理类型的 rootDir 由后端存为代理目标，前端不传自拟目录
+    rootDir: createForm.type === 'reverse_proxy' ? '' : createForm.rootDir.trim(),
     remark: createForm.remark
   }
   if (createForm.type === 'runtime') data.runtime = createForm.runtime
@@ -560,6 +593,8 @@ onMounted(() => {
       :data="sites"
       :loading="loading"
       :pagination="pagination"
+      :error="loadError"
+      @retry="loadSites"
     >
       <!-- 空态引导（词表 D15）：无筛选条件的首次空态给创建入口；筛选空结果只显示「暂无数据」 -->
       <template #empty>
@@ -640,8 +675,22 @@ onMounted(() => {
         />
       </NFormItem>
 
-      <NFormItem :label="t('website.createModal.rootDirLabel')" path="rootDir">
-        <NInput v-model:value="createForm.rootDir" placeholder="/www/{domain}" />
+      <NFormItem v-if="createForm.type !== 'reverse_proxy'" :label="t('website.createModal.rootDirLabel')" path="rootDir">
+        <NInputGroup>
+          <NInput
+            v-model:value="createForm.rootDir"
+            class="mono"
+            placeholder="/www/{domain}"
+            clearable
+          />
+          <NButton @click="openDirPicker">
+            <template #icon>
+              <NIcon><FolderOpenOutline /></NIcon>
+            </template>
+            {{ t('website.createModal.rootDirBrowse') }}
+          </NButton>
+        </NInputGroup>
+        <div class="form-hint">{{ t('website.createModal.rootDirHint') }}</div>
       </NFormItem>
 
       <NFormItem :label="t('website.createModal.remarkLabel')" path="remark">
@@ -655,10 +704,18 @@ onMounted(() => {
     </NForm>
   </ModalForm>
 
+  <!-- 服务端目录浏览器（选择网站根目录） -->
+  <DirectoryPicker
+    :show="showDirPicker"
+    :initial-path="dirPickerInitial"
+    @update:show="(v: boolean) => (showDirPicker = v)"
+    @select="handleDirSelect"
+  />
+
   <!-- Nginx 配置抽屉 -->
   <NDrawer
     :show="showConfig"
-    :width="720"
+    :width="'var(--drawer-width)'"
     placement="right"
     @update:show="(v: boolean) => (showConfig = v)"
   >
@@ -762,8 +819,22 @@ onMounted(() => {
   transition: border-color var(--t-fast) var(--ease);
 }
 
+/* 单选框视觉隐藏但保留可聚焦性：
+   display:none 会移除出焦点序列，导致整个「网站类型」单选组无法用键盘操作
+   （方向键切换、Tab 聚焦全部失效），违反 WCAG 2.1.1。 */
 .type-radio-card :deep(.n-radio) {
-  display: none;
+  position: absolute;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* 隐藏后的单选框获得焦点时，在卡片上给出可见焦点环 */
+.type-radio-card:focus-within {
+  outline: 2px solid var(--acc);
+  outline-offset: 2px;
+  border-color: var(--acc);
 }
 
 .type-card {

@@ -159,7 +159,7 @@ defineExpose({ loadApps })
           :options="sourceFilterOptions"
           :placeholder="t('appstore.storeTab.sourcePlaceholder')"
           size="small"
-          style="width: 180px"
+          style="width: var(--input-xl)"
         />
         <NInput
           v-model:value="searchInput"

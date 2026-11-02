@@ -961,7 +961,7 @@ onMounted(() => {
                 :options="ruleOptions"
                 :placeholder="t('alert.history.filterRulePlaceholder')"
                 clearable
-                style="width: 200px"
+                style="width: var(--input-lg)"
                 @update:value="handleHistoryFilter"
               />
             </div>
@@ -972,7 +972,7 @@ onMounted(() => {
                 :options="historyStatusOptions"
                 :placeholder="t('alert.history.filterStatusPlaceholder')"
                 clearable
-                style="width: 140px"
+                style="width: var(--input-sm)"
                 @update:value="handleHistoryFilter"
               />
             </div>

@@ -861,7 +861,7 @@ onMounted(() => {
             {{ t('settings.smtp.save') }}
           </NButton>
           <div class="settings__test-email">
-            <NInput v-model:value="testEmailAddr" :placeholder="t('settings.smtp.testPlaceholder')" size="small" style="width: 220px" />
+            <NInput v-model:value="testEmailAddr" :placeholder="t('settings.smtp.testPlaceholder')" size="small" style="width: var(--input-xl)" />
             <NButton :loading="testEmailLoading" @click="handleTestEmail">
               <template #icon><NIcon><MailOutline /></NIcon></template>
               {{ t('settings.smtp.testSend') }}
@@ -1082,7 +1082,7 @@ onMounted(() => {
     <!-- 域名/记录 查看抽屉 -->
     <NDrawer
       :show="domainDrawerShow"
-      :width="820"
+      :width="'var(--drawer-width-lg)'"
       placement="right"
       :mask-closable="false"
       @update:show="(v: boolean) => (domainDrawerShow = v)"

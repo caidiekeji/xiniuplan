@@ -468,13 +468,13 @@ onBeforeUnmount(() => {
         size="small"
       >
         <NFormItem :label="t('terminal.form.host')" path="host">
-          <NInput v-model:value="connForm.host" placeholder="localhost" style="width: 160px" />
+          <NInput v-model:value="connForm.host" placeholder="localhost" style="width: var(--input-md)" />
         </NFormItem>
         <NFormItem :label="t('terminal.form.port')" path="port">
-          <NInputNumber v-model:value="connForm.port" :min="1" :max="65535" style="width: 100px" />
+          <NInputNumber v-model:value="connForm.port" :min="1" :max="65535" style="width: var(--input-sm)" />
         </NFormItem>
         <NFormItem :label="t('terminal.form.username')" path="username">
-          <NInput v-model:value="connForm.username" placeholder="root" style="width: 140px" />
+          <NInput v-model:value="connForm.username" placeholder="root" style="width: var(--input-sm)" />
         </NFormItem>
         <NFormItem :label="t('terminal.form.password')" path="password">
           <NInput
@@ -482,7 +482,7 @@ onBeforeUnmount(() => {
             type="password"
             show-password-on="click"
             :placeholder="t('terminal.form.passwordPlaceholder')"
-            style="width: 160px"
+            style="width: var(--input-md)"
             @keyup.enter="handleConnect"
           />
         </NFormItem>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { NDataTable, NSpin, NEmpty, NButton } from 'naive-ui'
+import { NDataTable, NSpin, NEmpty, NButton, NResult } from 'naive-ui'
 import type { DataTableColumns, DataTableProps } from 'naive-ui'
 
 const { t } = useI18n()
@@ -70,8 +70,25 @@ function handleCheckedRowKeysChange(val: (string | number)[]) {
 
 <template>
   <div class="data-table">
-    <NSpin :show="loading">
+    <NSpin :show="loading && !error">
+      <!--
+        错误态独立成面板（而非塞进空态插槽）：
+        1. 空表格无法区分「没有数据」与「加载失败」，用户只能靠一闪而过的 toast 判断；
+        2. 空态插槽常被页面自定义覆盖，错误态放在插槽里会被吞掉；
+        3. 独立面板可统一承载「重试」入口，让失败可恢复。
+      -->
+      <div v-if="error" class="data-table__error">
+        <NResult status="error" :title="t('common.loadFailed')" :description="error">
+          <template #footer>
+            <NButton size="small" type="primary" @click="emit('retry')">
+              {{ t('common.retry') }}
+            </NButton>
+          </template>
+        </NResult>
+      </div>
+
       <NDataTable
+        v-else
         :columns="safeColumns"
         :data="safeData"
         :pagination="internalPagination"
@@ -88,15 +105,9 @@ function handleCheckedRowKeysChange(val: (string | number)[]) {
         @row-contextmenu="(row: any, index: number, e: MouseEvent) => emit('rowContextmenu', row, index, e)"
       >
         <template #empty>
-          <!-- 错误态优先于空态：加载失败 ≠ 没有数据，需给出重试入口 -->
-          <slot name="empty" :error="error ?? null">
-            <NEmpty :description="error || t('common.noData')">
-              <template v-if="error" #extra>
-                <slot name="retry">
-                  <NButton size="small" @click="emit('retry')">{{ t('common.retry') }}</NButton>
-                </slot>
-              </template>
-            </NEmpty>
+          <!-- 无错误时的常规空态（错误态已在上方独立处理） -->
+          <slot name="empty" :error="null">
+            <NEmpty :description="t('common.noData')" />
           </slot>
         </template>
       </NDataTable>
@@ -107,6 +118,19 @@ function handleCheckedRowKeysChange(val: (string | number)[]) {
 <style scoped>
 .data-table {
   width: 100%;
+}
+
+/* 错误态面板：占位高度接近表格首屏，避免加载失败时页面塌陷 */
+.data-table__error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 220px;
+  padding: var(--space-4) var(--space-3);
+}
+
+.data-table__error :deep(.n-result) {
+  padding: var(--space-4) 0;
 }
 
 .data-table :deep(.n-data-table) {
