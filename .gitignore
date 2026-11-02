@@ -58,3 +58,4 @@ frontend/dist-deploy*/
 
 # 编译产物二进制（由 CI release.yml 构建并发布到 Releases，不入库）
 backend/rhinopanel-linux
+backend/rhinopanel.exe

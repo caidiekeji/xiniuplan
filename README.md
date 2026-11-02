@@ -18,7 +18,7 @@
 ## 项目结构
 
 ```
-cloudpivot/
+rhinopanel/
 ├── backend/                    # Go 后端
 │   ├── cmd/agent/main.go       # 入口
 │   ├── internal/
@@ -69,7 +69,7 @@ go run cmd/agent/main.go
 ```
 
 - 默认监听端口: **8888**
-- 数据库: SQLite（自动创建到 `./data/cloudpivot.db`）
+- 数据库: SQLite（自动创建到 `./data/rhinopanel.db`）
 - JWT: RS256，首次启动自动生成 RSA 密钥对
 
 ### 前端
@@ -181,7 +181,7 @@ npm run dev
 
 ## Docker 安装
 
-支持通过 Docker 镜像快速部署 CloudPivot，详见 [Docker 安装指南](docs/docker-install.md)。
+支持通过 Docker 镜像快速部署 RhinoPanel，详见 [Docker 安装指南](docs/docker-install.md)。
 
 ## 文档
 
@@ -194,4 +194,4 @@ npm run dev
 
 ## 许可证
 
-本项目基于 [MIT License](LICENSE) 开源，版权所有 © 2026 CloudPivot。
+本项目基于 [MIT License](LICENSE) 开源，版权所有 © 2026 RhinoPanel。

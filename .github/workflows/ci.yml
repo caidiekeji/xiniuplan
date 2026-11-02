@@ -24,10 +24,10 @@ jobs:
         run: go vet ./...
       - name: Test
         working-directory: backend
-        run: go test ./... -v -count=1 || echo "No tests yet"
+        run: go test ./... -count=1
 
   frontend:
-    name: Frontend Build
+    name: Frontend Build & Test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -39,6 +39,9 @@ jobs:
       - name: Install dependencies
         working-directory: frontend
         run: npm ci
+      - name: Unit test
+        working-directory: frontend
+        run: npm run test
       - name: Type check & Build
         working-directory: frontend
         run: npm run build

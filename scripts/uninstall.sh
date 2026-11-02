@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================================
-# CloudPivot 面板卸载脚本
+# 犀牛面板（RhinoPanel） 面板卸载脚本
 # 支持: CentOS 7+ / Ubuntu 20.04+ / Debian 11+
 # ============================================================
 
@@ -14,9 +14,9 @@ BLUE='\033[0;34m'
 NC='\033[0m'
 
 # 安装配置（与 install.sh 保持一致）
-INSTALL_DIR="/opt/cloudpivot"
-BIN_PATH="/usr/local/bin/cloudpivot"
-SERVICE_NAME="cloudpivot"
+INSTALL_DIR="/opt/rhinopanel"
+BIN_PATH="/usr/local/bin/rhinopanel"
+SERVICE_NAME="rhinopanel"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
 
 # ============================================================
@@ -40,7 +40,7 @@ check_root() {
 # ============================================================
 
 stop_service() {
-    info "停止 CloudPivot 服务..."
+    info "停止 犀牛面板（RhinoPanel） 服务..."
 
     if systemctl is-active --quiet "${SERVICE_NAME}" 2>/dev/null; then
         systemctl stop "${SERVICE_NAME}"
@@ -78,13 +78,13 @@ remove_service_file() {
 }
 
 # ============================================================
-# 3. 停止 cloudpivot 进程（兜底）
+# 3. 停止 rhinopanel 进程（兜底）
 # ============================================================
 
 kill_process() {
     info "检查并停止残留进程..."
 
-    # 查找 cloudpivot 进程
+    # 查找 rhinopanel 进程
     PIDS=$(pgrep -f "${BIN_PATH}" 2>/dev/null || true)
     if [ -n "${PIDS}" ]; then
         for pid in ${PIDS}; do
@@ -162,7 +162,7 @@ remove_files() {
 print_uninstall_complete() {
     echo ""
     echo "============================================================"
-    echo -e "${GREEN}  CloudPivot 面板卸载完成!${NC}"
+    echo -e "${GREEN}  犀牛面板（RhinoPanel） 面板卸载完成!${NC}"
     echo "============================================================"
     echo ""
     if [ "${REMOVE_DATA}" = "no" ] && [ -d "${INSTALL_DIR}/data" ]; then
@@ -192,14 +192,14 @@ print_uninstall_complete() {
 main() {
     echo ""
     echo "============================================================"
-    echo "  CloudPivot 面板卸载脚本"
+    echo "  犀牛面板（RhinoPanel） 面板卸载脚本"
     echo "============================================================"
     echo ""
 
     check_root
 
     # 确认卸载
-    read -r -p "确认要卸载 CloudPivot 面板吗？[y/N]: " confirm
+    read -r -p "确认要卸载 犀牛面板（RhinoPanel） 面板吗？[y/N]: " confirm
     case "${confirm}" in
         [yY]|[yY][eE][sS])
             info "开始卸载..."
